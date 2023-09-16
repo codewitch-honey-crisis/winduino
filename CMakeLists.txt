@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(FIND_LIBRARY_USE_LIB64_PATHS True)
 set( LIBS d2d1 )
-# cmake sucks so do it this way
+# just quick and dirty so do it this way
 add_executable(winduino src/main.cpp 
                 src/winduino.cpp
                 lib/htcw_io/src/io_stream.cpp
