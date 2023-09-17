@@ -92,6 +92,7 @@ uint8_t * transfer_buffer = nullptr;
 constexpr static const size_t transfer_buffer_size = frame_buffer_t::sizeof_buffer(screen_size.width , screen_size.height );
 screen_t main_screen;
 static int seconds=0;
+static int printed = 0;
 template <typename ControlSurfaceType>
 class fire_box : public control<ControlSurfaceType> {
     int draw_state = 0;
@@ -513,15 +514,22 @@ void loop() {
         alpha.visible(false);
         fire.visible(true);
         plaid.visible(false);
-        Serial.println("fire");
+        if(printed!=5) {
+            Serial.println("fire");
+            printed = 5;
+        }
     }
     if(seconds==10) {
         alpha.visible(false);
         fire.visible(false);
         plaid.visible(true);
-        Serial.println("plaid");
+        if(printed!=10) {
+            Serial.println("plaid");
+            printed = 10;
+        }
     }
     if(seconds>=15) {
+        printed = 0;
         alpha.visible(true);
         fire.visible(false);
         plaid.visible(false);
