@@ -14,6 +14,10 @@ SCREEN_SIZE;
 /// @brief Reports the milliseconds since the app started
 /// @return The number of milliseconds elapsed
 uint32_t millis();
+/// @brief Delays for the number of milliseconds
+/// @return The number of milliseconds to delay
+void delay(uint32_t ms);
+
 /// @brief The start routine - similar to main()
 void setup();
 /// @brief The loop() routine, as in Arduino

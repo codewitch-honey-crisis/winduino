@@ -142,6 +142,10 @@ uint32_t millis() {
     QueryPerformanceCounter(&end_time);
     return uint32_t(((double)(end_time.QuadPart - start_time.QuadPart) / counter_freq.QuadPart) * 1000);
 }
+void delay(uint32_t ms) {
+    uint32_t end = ms + millis();
+    while(millis()<end);
+}
 void log(const char* text) {
    int index = GetWindowTextLength (hwnd_log);
    SetFocus (hwnd_log); // set focus
