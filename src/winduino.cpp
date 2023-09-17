@@ -206,7 +206,11 @@ int main(int argc, char* argv[]) {
     HWND hwnd_dx=NULL; 
     if (!IsWindow(hwnd)) goto exit;
     // create the DirectX window
-    hwnd_dx = CreateWindowW(L"Winduino_DX",L"",WS_CHILDWINDOW | WS_VISIBLE,0,0,screen_size.width,screen_size.height,hwnd,NULL,hInstance,NULL);
+    hwnd_dx = CreateWindowW(L"Winduino_DX",L"",
+                            WS_CHILDWINDOW | WS_VISIBLE,
+                            0,0,screen_size.width,screen_size.height,
+                            hwnd,NULL,
+                            hInstance,NULL);
     if (!IsWindow(hwnd_dx)) goto exit;
     // create the log textbox
     hwnd_log=CreateWindowExW(WS_EX_CLIENTEDGE, L"edit", L"",
@@ -229,11 +233,12 @@ int main(int argc, char* argv[]) {
     if (render_mutex == NULL) {
         goto exit;
     }
+    // run setup() to initialize user code
+    setup();
+    // start DirectX
     hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2d_factory);
     assert(hr == S_OK);
     if (hr != S_OK) goto exit;
-    // run setup() to initialize user code
-    setup();
     // set up our direct2d surface
     {
         RECT rc;
@@ -298,13 +303,13 @@ int main(int argc, char* argv[]) {
             }
             // handle our out of band messages
             if (msg.message == WM_LBUTTONDOWN && msg.hwnd==hwnd_dx) {
-                if(LOWORD(msg.lParam)<screen_size.width && HIWORD(msg.lParam)<screen_size.height) {
+                if(LOWORD(msg.lParam)<screen_size.width && 
+                    HIWORD(msg.lParam)<screen_size.height) {
                     SetCapture(hwnd_dx);
                     
                     if (WAIT_OBJECT_0 == WaitForSingleObject(
                                             render_mutex,  // handle to mutex
                                             INFINITE)) {   // no time-out interval)
-
                         old_mouse_state = mouse_state;
                         mouse_state = 1;
                         mouse_loc.x = LOWORD(msg.lParam);
@@ -315,11 +320,11 @@ int main(int argc, char* argv[]) {
                     update_title(hwnd);
                 }
             }
-            if (msg.message == WM_MOUSEMOVE && msg.hwnd==hwnd_dx) {
+            if (msg.message == WM_MOUSEMOVE && 
+                msg.hwnd==hwnd_dx) {
                 if (WAIT_OBJECT_0 == WaitForSingleObject(
                                          render_mutex,  // handle to mutex
                                          INFINITE)) {   // no time-out interval)
-
                     if (mouse_state == 1 && MK_LBUTTON == msg.wParam) {
                         mouse_req = 1;
                         mouse_loc.x = (int16_t)LOWORD(msg.lParam);
@@ -329,7 +334,8 @@ int main(int argc, char* argv[]) {
                 }
                 update_title(hwnd);
             }
-            if (msg.message == WM_LBUTTONUP && msg.hwnd==hwnd_dx) {
+            if (msg.message == WM_LBUTTONUP &&
+                msg.hwnd==hwnd_dx) {
                 ReleaseCapture();
                 if (WAIT_OBJECT_0 == WaitForSingleObject(
                                          render_mutex,  // handle to mutex
