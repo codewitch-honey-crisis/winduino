@@ -17,26 +17,31 @@
 /////////////////////////////////////////////////////
 #pragma comment(lib, "d2d1.lib")
 /////////////////////////////////////////////////////
-
+// fake serial ports
 HardwareSerial Serial;
 HardwareSerial USBSerial;
+// so we can implement millis(), delay()
 static LARGE_INTEGER start_time;
+// frame counter
 static volatile DWORD frames = 0;
-static volatile DWORD seconds = 0;
+// handles for windows
 static HANDLE quit_event = NULL;
 static HANDLE render_thread = NULL;
 static HANDLE render_mutex = NULL;
+static HWND hwnd_log;
+// flag to indicate quitting
 static bool should_quit = false;
+// directX stuff
 static ID2D1HwndRenderTarget* render_target = nullptr;
 static ID2D1Factory* d2d_factory = nullptr;
 static ID2D1Bitmap* render_bitmap = nullptr;
-HWND hwnd_log;
-
+// mouse mess
 static struct { int x; int y; } mouse_loc;
 static int mouse_state = 0;  // 0 = released, 1 = pressed
 static int old_mouse_state = 0;
 static int mouse_req = 0;
 
+// updates the window title with the FPS and any mouse info
 static void update_title(HWND hwnd) {
     wchar_t wsztitle[64];
     wcscpy(wsztitle, L"Winduino - ");
@@ -55,15 +60,9 @@ static void update_title(HWND hwnd) {
     }
     SetWindowTextW(hwnd, wsztitle);
 }
-
-LRESULT CALLBACK WindowProcMain(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_CLOSE) {
-        SetEvent(quit_event);
-        should_quit = true;
-    }
-    return DefWindowProc(hWnd, uMsg, wParam, lParam);
-}
-DWORD thread_proc(void* state) {
+// this handles our main application loop
+// plus rendering
+static DWORD render_thread_proc(void* state) {
     bool quit = false;
     while (!quit) {
         loop();
@@ -91,15 +90,26 @@ DWORD thread_proc(void* state) {
     }
     return 0;
 }
-
+// the only message we care about for the
+// main window is WM_CLOSE
+static LRESULT CALLBACK WindowProcMain(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_CLOSE) {
+        // inform all threads we're quitting
+        SetEvent(quit_event);
+        should_quit = true;
+    }
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
 /////////////////////////////////////////////////////
-LRESULT CALLBACK WindowProcDX(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+static LRESULT CALLBACK WindowProcDX(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // shouldn't get this, but handle anyway
     if (uMsg == WM_SIZE) {
         if (render_target) {
             D2D1_SIZE_U size = D2D1::SizeU(LOWORD(lParam), HIWORD(lParam));
             render_target->Resize(size);
         }
     }
+    // in case we receive the close event
     if (uMsg == WM_CLOSE) {
         SetEvent(quit_event);
         should_quit = true;
@@ -146,20 +156,23 @@ void delay(uint32_t ms) {
     uint32_t end = ms + millis();
     while(millis()<end);
 }
-static void log(const char* text) {
+// write to the log window
+static void append_log(const char* text) {
    int index = GetWindowTextLength (hwnd_log);
    SetFocus (hwnd_log); // set focus
    SendMessageA(hwnd_log, EM_SETSEL, (WPARAM)index, (LPARAM)index); // set selection - end of text
    SendMessageA(hwnd_log, EM_REPLACESEL, 0, (LPARAM)text); // append!
 }
 
-
-/////////////////////////////////////////////////////
+// entry point
 int main(int argc, char* argv[]) {
-    // CoInitializeEx(0, COINIT_MULTITHREADED);
+    // Initialize COM
     CoInitialize(0);
+    HRESULT hr = S_OK;
+    // get our uptime start
     QueryPerformanceCounter(&start_time);
-
+    // register the window classes
+    // we'll need:
     WNDCLASSW wc;
     HINSTANCE hInstance = GetModuleHandle(NULL);
     wc.style = CS_HREDRAW | CS_VREDRAW;
@@ -177,10 +190,12 @@ int main(int argc, char* argv[]) {
     wc.lpfnWndProc = WindowProcDX;
     wc.lpszClassName = L"Winduino_DX";
     RegisterClassW(&wc);
-    HRESULT hr = S_OK;
+
     RECT r = {0, 0, screen_size.width*2, screen_size.height - 1};
-    HWND hwnd_dx=NULL; 
+    // adjust the size of the window so
+    // the above is our client rect
     AdjustWindowRectEx(&r, WS_CAPTION | WS_SYSMENU | WS_BORDER, FALSE, WS_EX_APPWINDOW);
+    // create the main window
     HWND hwnd = CreateWindowExW(
         WS_EX_APPWINDOW, L"Winduino", L"Winduino",
         WS_CAPTION | WS_SYSMENU,
@@ -188,15 +203,18 @@ int main(int argc, char* argv[]) {
         r.right - r.left + 1,
         r.bottom - r.top + 1,
         NULL, NULL, hInstance, NULL);
+    HWND hwnd_dx=NULL; 
     if (!IsWindow(hwnd)) goto exit;
+    // create the DirectX window
     hwnd_dx = CreateWindowW(L"Winduino_DX",L"",WS_CHILDWINDOW | WS_VISIBLE,0,0,screen_size.width,screen_size.height,hwnd,NULL,hInstance,NULL);
     if (!IsWindow(hwnd_dx)) goto exit;
+    // create the log textbox
     hwnd_log=CreateWindowExW(WS_EX_CLIENTEDGE, L"edit", L"",
                               WS_CHILD | WS_VISIBLE |WS_HSCROLL | WS_VSCROLL | WS_TABSTOP | WS_BORDER | ES_LEFT| ES_MULTILINE ,
                               screen_size.width+1, 0, (r.right+r.left)/2, screen_size.height,
                               hwnd, (HMENU)(1),
                               hInstance, NULL);
-
+    // for signalling when to exit
     quit_event = CreateEvent(
         NULL,              // default security attributes
         TRUE,              // manual-reset event
@@ -206,6 +224,7 @@ int main(int argc, char* argv[]) {
     if (quit_event == NULL) {
         goto exit;
     }
+    // for handling our render
     render_mutex = CreateMutex(NULL, FALSE, NULL);
     if (render_mutex == NULL) {
         goto exit;
@@ -213,8 +232,9 @@ int main(int argc, char* argv[]) {
     hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2d_factory);
     assert(hr == S_OK);
     if (hr != S_OK) goto exit;
+    // run setup() to initialize user code
     setup();
-    
+    // set up our direct2d surface
     {
         RECT rc;
         GetClientRect(hwnd_dx, &rc);
@@ -229,6 +249,7 @@ int main(int argc, char* argv[]) {
         assert(hr == S_OK);
         if (hr != S_OK) goto exit;
     }
+    // initialize the render bitmap
     {
         
         D2D1_SIZE_U size = {0};
@@ -251,18 +272,20 @@ int main(int argc, char* argv[]) {
         assert(hr == S_OK);
         if (hr != S_OK) goto exit;
     }
-
+    // show the main window
     ShowWindow(hwnd, SW_SHOWNORMAL);
     UpdateWindow(hwnd);
+    // for the frame counter
     SetTimer(hwnd, 0, 1000, NULL);
-    render_thread = CreateThread(NULL, 4000 * 4, thread_proc, NULL, 0, NULL);
+    // this is the thread where the actual rendering 
+    // takes place and where loop() is run
+    render_thread = CreateThread(NULL, 4000 * 4, render_thread_proc, NULL, 0, NULL);
     if (render_thread == NULL) {
         goto exit;
     }
-
+    // main message pump
     while (!should_quit) {
         DWORD result = 0;
-
         MSG msg = {0};
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
@@ -273,7 +296,7 @@ int main(int argc, char* argv[]) {
                 update_title(hwnd);
                 InterlockedExchange(&frames, 0);
             }
-            
+            // handle our out of band messages
             if (msg.message == WM_LBUTTONDOWN && msg.hwnd==hwnd_dx) {
                 if(LOWORD(msg.lParam)<screen_size.width && HIWORD(msg.lParam)<screen_size.height) {
                     SetCapture(hwnd_dx);
@@ -292,7 +315,7 @@ int main(int argc, char* argv[]) {
                     update_title(hwnd);
                 }
             }
-            if (msg.message == WM_MOUSEMOVE) {
+            if (msg.message == WM_MOUSEMOVE && msg.hwnd==hwnd_dx) {
                 if (WAIT_OBJECT_0 == WaitForSingleObject(
                                          render_mutex,  // handle to mutex
                                          INFINITE)) {   // no time-out interval)
@@ -306,7 +329,7 @@ int main(int argc, char* argv[]) {
                 }
                 update_title(hwnd);
             }
-            if (msg.message == WM_LBUTTONUP) {
+            if (msg.message == WM_LBUTTONUP && msg.hwnd==hwnd_dx) {
                 ReleaseCapture();
                 if (WAIT_OBJECT_0 == WaitForSingleObject(
                                          render_mutex,  // handle to mutex
@@ -344,16 +367,10 @@ exit:
     if (render_mutex != NULL) {
         CloseHandle(render_mutex);
     }
-    // SetEvent(g_hReady);
-    // SetConsoleCtrlHandler(ConsoleHandlerRoutine, FALSE);
-
     render_target->Release();
     render_bitmap->Release();
     d2d_factory->Release();
     CoUninitialize();
-
-    // CloseHandle(g_hQuit);
-    // CloseHandle(g_hReady);
 }
 /////////////////////////////////////////////////////
 void HardwareSerial::begin(int baud,int ignored, int ignored2, int ignored3) {
@@ -365,12 +382,12 @@ void HardwareSerial::printf(const char* fmt,...) {
     va_start(args, fmt);
     vsnprintf(sz,sizeof(sz),fmt,args);
     va_end(args);
-    log(sz);
+    append_log(sz);
 }
 void HardwareSerial::print(const char* text) {
-    log(text);
+    append_log(text);
 }
 void HardwareSerial::println(const char* text) {
-    log(text);
-    log("\r\n");
+    append_log(text);
+    append_log("\r\n");
 }
