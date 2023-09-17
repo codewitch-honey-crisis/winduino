@@ -130,8 +130,8 @@ void flush_bitmap(int x1, int y1, int w, int h, const void* bmp) {
         D2D1_RECT_U b;
         b.top = y1;
         b.left = x1;
-        b.bottom = y1+h-1;
-        b.right = x1+w-1;
+        b.bottom = y1+h;
+        b.right = x1+w;
         render_bitmap->CopyFromMemory(&b, bmp, w * 4);
     }
 }

@@ -89,7 +89,8 @@ static bgrx_pixel<32> fire_cols[] = {
 };
 
 uint8_t * transfer_buffer = nullptr;
-constexpr static const size_t transfer_buffer_size = frame_buffer_t::sizeof_buffer(screen_size.width , screen_size.height );
+//constexpr static const size_t transfer_buffer_size = frame_buffer_t::sizeof_buffer(screen_size.width , screen_size.height );
+constexpr static const size_t transfer_buffer_size = 128*1024;
 screen_t main_screen;
 static int seconds=0;
 static int printed = 0;
