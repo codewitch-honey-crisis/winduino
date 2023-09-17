@@ -39,7 +39,7 @@ static int mouse_req = 0;
 
 static void update_title(HWND hwnd) {
     wchar_t wsztitle[64];
-    wcscpy(wsztitle, L"UIX rendering @ ");
+    wcscpy(wsztitle, L"Winduino - ");
     DWORD f = frames;
     _itow((int)f, wsztitle + wcslen(wsztitle), 10);
     wcscat(wsztitle, L" FPS");
@@ -146,7 +146,7 @@ void delay(uint32_t ms) {
     uint32_t end = ms + millis();
     while(millis()<end);
 }
-void log(const char* text) {
+static void log(const char* text) {
    int index = GetWindowTextLength (hwnd_log);
    SetFocus (hwnd_log); // set focus
    SendMessageA(hwnd_log, EM_SETSEL, (WPARAM)index, (LPARAM)index); // set selection - end of text
@@ -171,25 +171,25 @@ int main(int argc, char* argv[]) {
     wc.lpszMenuName = NULL;
     wc.hIcon = NULL;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.lpszClassName = L"UIX";
+    wc.lpszClassName = L"Winduino";
 
     RegisterClassW(&wc);
     wc.lpfnWndProc = WindowProcDX;
-    wc.lpszClassName = L"UIX_DX";
+    wc.lpszClassName = L"Winduino_DX";
     RegisterClassW(&wc);
     HRESULT hr = S_OK;
     RECT r = {0, 0, screen_size.width*2, screen_size.height - 1};
     HWND hwnd_dx=NULL; 
     AdjustWindowRectEx(&r, WS_CAPTION | WS_SYSMENU | WS_BORDER, FALSE, WS_EX_APPWINDOW);
     HWND hwnd = CreateWindowExW(
-        WS_EX_APPWINDOW, L"UIX", L"UIX",
+        WS_EX_APPWINDOW, L"Winduino", L"Winduino",
         WS_CAPTION | WS_SYSMENU,
         0, 0,
         r.right - r.left + 1,
         r.bottom - r.top + 1,
         NULL, NULL, hInstance, NULL);
     if (!IsWindow(hwnd)) goto exit;
-    hwnd_dx = CreateWindowW(L"UIX_DX",L"",WS_CHILDWINDOW | WS_VISIBLE,0,0,screen_size.width,screen_size.height,hwnd,NULL,hInstance,NULL);
+    hwnd_dx = CreateWindowW(L"Winduino_DX",L"",WS_CHILDWINDOW | WS_VISIBLE,0,0,screen_size.width,screen_size.height,hwnd,NULL,hInstance,NULL);
     if (!IsWindow(hwnd_dx)) goto exit;
     hwnd_log=CreateWindowExW(WS_EX_CLIENTEDGE, L"edit", L"",
                               WS_CHILD | WS_VISIBLE |WS_HSCROLL | WS_VSCROLL | WS_TABSTOP | WS_BORDER | ES_LEFT| ES_MULTILINE ,
