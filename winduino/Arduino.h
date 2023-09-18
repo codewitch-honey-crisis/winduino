@@ -139,7 +139,7 @@ void attachInterrupt(uint8_t pin, void (*)(void), int mode);
 void detachInterrupt(uint8_t pin);
 
 const char * pathToFileName(const char * path);
-
+void append_log(const char* text);
 /// @brief The start routine - similar to main()
 void setup();
 /// @brief The loop() routine, as in Arduino
@@ -156,27 +156,12 @@ void flush_bitmap(int x1, int y1, int w, int h, const void* bmp );
 /// @return True if the button is pressed
 bool read_mouse(int* out_x, int* out_y);
 
-/// @brief Emulates a subset of the Arduino serial to ouput to the log window
-class HardwareSerial {
-public:
-    /// @brief Does nothing
-    /// @param baud not relevant
-    /// @param ignored not relevant
-    /// @param ignored2 not relevant
-    /// @param ignored3 not relevant
-    void begin(int baud,int ignored=0,int ignored2=0,int ignored3=0);
-    /// @brief Prints some text to the log
-    /// @param text The text
-    void print(const char* text);
-    /// @brief Prints text followed by a newline to the log
-    /// @param text The text
-    void println(const char* text);
-    /// @brief Prints formatted text to the log
-    /// @param fmt The format string
-    /// @param  The arguments
-    void printf(const char* fmt,...);
-};
-/// @brief The primarily serial
-extern HardwareSerial Serial;
-/// @brief For compatibility
-extern HardwareSerial USBSerial;
+#include <algorithm>
+#include <cmath>
+
+#include "WCharacter.h"
+#include "WString.h"
+#include "Stream.h"
+#include "Printable.h"
+#include "Print.h"
+#include "HardwareSerial.h"

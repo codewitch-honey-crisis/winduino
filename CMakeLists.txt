@@ -15,6 +15,7 @@ add_executable(winduino
                 winduino/Stream.cpp
                 winduino/StreamString.cpp
                 winduino/WMath.cpp
+                winduino/HardwareSerial.cpp
                 winduino/StdioFSImpl.cpp
                 winduino/FS.cpp
 

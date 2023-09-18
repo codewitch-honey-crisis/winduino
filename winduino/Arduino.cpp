@@ -19,9 +19,6 @@
 
 #include "Arduino.h"
 
-// fake serial ports
-HardwareSerial Serial;
-HardwareSerial USBSerial;
 // so we can implement millis(), delay()
 static LARGE_INTEGER start_time;
 // frame counter
@@ -173,7 +170,7 @@ void delay(uint32_t ms) {
     while(millis()<end);
 }
 // write to the log window
-static void append_log(const char* text) {
+void append_log(const char* text) {
    int index = GetWindowTextLength (hwnd_log);
    SetFocus (hwnd_log); // set focus
    SendMessageA(hwnd_log, EM_SETSEL, (WPARAM)index, (LPARAM)index); // set selection - end of text
@@ -409,23 +406,4 @@ void attachInterrupt(uint8_t pin, void (*)(void), int mode) {
 }
 void detachInterrupt(uint8_t pin) {
     
-}
-
-void HardwareSerial::begin(int baud,int ignored, int ignored2, int ignored3) {
-    // do nothing
-}
-void HardwareSerial::printf(const char* fmt,...) {
-    char sz[8192];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(sz,sizeof(sz),fmt,args);
-    va_end(args);
-    append_log(sz);
-}
-void HardwareSerial::print(const char* text) {
-    append_log(text);
-}
-void HardwareSerial::println(const char* text) {
-    append_log(text);
-    append_log("\r\n");
 }
