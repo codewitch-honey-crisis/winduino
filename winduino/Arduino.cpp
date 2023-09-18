@@ -1,4 +1,3 @@
-#include <winduino.hpp>
 #define UNICODE
 #if defined(UNICODE) && !defined(_UNICODE)
     #define _UNICODE
@@ -17,6 +16,9 @@
 /////////////////////////////////////////////////////
 #pragma comment(lib, "d2d1.lib")
 /////////////////////////////////////////////////////
+
+#include "Arduino.h"
+
 // fake serial ports
 HardwareSerial Serial;
 HardwareSerial USBSerial;
@@ -59,6 +61,20 @@ static void update_title(HWND hwnd) {
         wcscat(wsztitle, L")");
     }
     SetWindowTextW(hwnd, wsztitle);
+}
+const char * pathToFileName(const char * path)
+{
+    size_t i = 0;
+    size_t pos = 0;
+    char * p = (char *)path;
+    while(*p){
+        i++;
+        if(*p == '/' || *p == '\\'){
+            pos = i;
+        }
+        p++;
+    }
+    return path+pos;
 }
 // this handles our main application loop
 // plus rendering
@@ -378,7 +394,23 @@ exit:
     d2d_factory->Release();
     CoUninitialize();
 }
-/////////////////////////////////////////////////////
+void pinMode(uint8_t pin, uint8_t mode) {
+
+}
+void digitalWrite(uint8_t pin, uint8_t val) {
+
+}
+int digitalRead(uint8_t pin) {
+    return LOW;
+}
+
+void attachInterrupt(uint8_t pin, void (*)(void), int mode) {
+
+}
+void detachInterrupt(uint8_t pin) {
+    
+}
+
 void HardwareSerial::begin(int baud,int ignored, int ignored2, int ignored3) {
     // do nothing
 }

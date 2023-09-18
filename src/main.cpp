@@ -1,5 +1,5 @@
 #define SCREEN_SIZE {320,240}
-#include <winduino.hpp>
+#include <Arduino.h>
 #include <gfx.hpp>
 #include <uix.hpp>
 using namespace gfx;
