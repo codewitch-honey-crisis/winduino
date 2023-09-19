@@ -1,6 +1,7 @@
 // the code in this file is from my UIX benchmark demo, which is MIT licensed - honey the codewitch
 #define SCREEN_SIZE {320,240}
 #include <Arduino.h>
+#include <SD.h>
 #include <gfx.hpp>
 #include <uix.hpp>
 using namespace gfx;
@@ -488,6 +489,9 @@ void uix_on_flush(const rect16& bounds, const void* bmp, void* state) {
 }
 void setup() {
     Serial.begin(115200);
+    SD.begin(".\\sd");
+    File f = SD.open("/foo.txt");
+    Serial.println(f.readString());
     transfer_buffer = (uint8_t *)malloc(transfer_buffer_size);
     main_screen.dimensions((ssize16)SCREEN_SIZE);
     main_screen.buffer_size(transfer_buffer_size);
@@ -526,6 +530,7 @@ void loop() {
         fire.visible(false);
         plaid.visible(true);
         if(printed!=10) {
+            
             Serial.println("plaid");
             printed = 10;
         }

@@ -18,7 +18,8 @@ add_executable(winduino
                 winduino/HardwareSerial.cpp
                 winduino/StdioFSImpl.cpp
                 winduino/FS.cpp
-
+                winduino/SD.cpp
+                
                 lib/htcw_io/src/io_stream.cpp
                 lib/htcw_gfx/src/gfx_drawing.cpp
                 lib/htcw_gfx/src/gfx_encoding.cpp
