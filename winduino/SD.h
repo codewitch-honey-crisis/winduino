@@ -34,7 +34,7 @@ protected:
 
 public:
     SDFS(FSImplPtr impl);
-    bool begin(const char * mountpoint="/sd", uint8_t max_files=5, bool format_if_empty=false);
+    bool begin(const char * mountpoint=".\\sd", uint8_t max_files=5, bool format_if_empty=false);
     void end();
     sdcard_type_t cardType();
     uint64_t cardSize();
