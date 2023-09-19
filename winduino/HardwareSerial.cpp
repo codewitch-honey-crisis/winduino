@@ -243,6 +243,7 @@ size_t HardwareSerial::write(const uint8_t *buffer, size_t size)
     memcpy(buf,buffer,size);
     buf[size]=0;
     append_log(buf);
+    free(buf);
     return size;
 }
 uint32_t  HardwareSerial::baudRate()
