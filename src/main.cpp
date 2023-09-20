@@ -90,12 +90,58 @@ static bgrx_pixel<32> fire_cols[] = {
         bgrx_pixel<32>(240,252,252,255), bgrx_pixel<32>(244,252,252,255), bgrx_pixel<32>(248,252,252,255), bgrx_pixel<32>(252,252,252,255)
 };
 
-uint8_t * transfer_buffer = nullptr;
-//constexpr static const size_t transfer_buffer_size = frame_buffer_t::sizeof_buffer(screen_size.width , screen_size.height );
-constexpr static const size_t transfer_buffer_size = 128*1024;
-screen_t main_screen;
-static int seconds=0;
-static int printed = 0;
+// downloaded from fontsquirrel.com and header generated with
+// https://honeythecodewitch.com/gfx/generator
+#define ARCHITECTS_DAUGHTER_IMPLEMENTATION
+#include <assets/architects_daughter.hpp>
+static const open_font& text_font = architects_daughter;
+
+// declare the format of the screen
+using screen_t = screen<bgrx_pixel<32>>;
+using color_t = color<typename screen_t::pixel_type>;
+// for access to RGB8888 colors which controls use
+using color32_t = color<rgba_pixel<32>>;
+
+// UIX allows you to use two buffers for maximum DMA efficiency
+// you don't have to, but performance is significantly better
+// declare 64KB across two buffers for transfer
+constexpr static const int lcd_screen_size = bitmap<typename screen_t::pixel_type>::sizeof_buffer(size16(screen_size.width, screen_size.height));
+constexpr static const int lcd_buffer_size = lcd_screen_size > 64 * 1024 ? 64 * 1024 : lcd_screen_size;
+static uint8_t lcd_buffer1[lcd_buffer_size];
+
+// the main screen
+screen_t anim_screen({screen_size.width,screen_size.height}, sizeof(lcd_buffer1), lcd_buffer1, nullptr);
+
+void uix_on_touch(point16* out_locations,
+                  size_t* in_out_locations_size,
+                  void* state) {
+    if(!*in_out_locations_size) {
+        return;
+    }
+    int x,y;
+    if(read_mouse(&x,&y)) {
+        if(ssize16(SCREEN_SIZE).bounds().intersects(spoint16(x,y))) {
+            *in_out_locations_size =1;
+            *out_locations = point16((unsigned)x,(unsigned)y);
+            return;
+        }
+    }
+    *in_out_locations_size = 0;
+}
+void uix_on_flush(const rect16& bounds, const void* bmp, void* state) {
+	flush_bitmap(bounds.x1,bounds.y1,bounds.x2-bounds.x1+1,bounds.y2-bounds.y1+1,bmp);
+    anim_screen.flush_complete();
+}
+
+using label_t = label<typename screen_t::control_surface_type>;
+static label_t fps(anim_screen);
+static label_t summaries[] = {
+    label_t(anim_screen),
+    label_t(anim_screen),
+    label_t(anim_screen),
+    label_t(anim_screen),
+    label_t(anim_screen),
+    label_t(anim_screen)};
 template <typename ControlSurfaceType>
 class fire_box : public control<ControlSurfaceType> {
     int draw_state = 0;
@@ -330,11 +376,11 @@ class alpha_box : public control<ControlSurfaceType> {
         }
     }
     virtual bool on_touch(size_t locations_size, const spoint16* locations) override {
-        //fps.visible(true);
+        fps.visible(true);
         return true;
     }
     virtual void on_release() override {
-        //fps.visible(false);
+        fps.visible(false);
     }
 };
 using alpha_box_t = alpha_box<screen_t::control_surface_type>;
@@ -342,9 +388,11 @@ using alpha_box_t = alpha_box<screen_t::control_surface_type>;
 template <typename ControlSurfaceType>
 class plaid_box : public control<ControlSurfaceType> {
     int draw_state = 0;
-    spoint16 pts[10];        // locations
-    spoint16 dts[10];        // deltas
-    rgba_pixel<32> cls[10];  // colors
+    constexpr static const size_t count = 10;
+    constexpr static const int16_t width = 25;
+    spoint16 pts[count];        // locations
+    spoint16 dts[count];        // deltas
+    rgba_pixel<32> cls[count];  // colors
 
    public:
     using control_surface_type = ControlSurfaceType;
@@ -353,9 +401,6 @@ class plaid_box : public control<ControlSurfaceType> {
     using palette_type = typename base_type::palette_type;
     plaid_box(uix::invalidation_tracker& parent, const palette_type* palette = nullptr)
         : base_type(parent, palette) {
-    }
-    plaid_box()
-        : base_type() {
     }
     plaid_box(plaid_box&& rhs) {
         do_move_control(rhs);
@@ -376,10 +421,7 @@ class plaid_box : public control<ControlSurfaceType> {
         return *this;
     }
     virtual void on_before_render() {
-        constexpr static const size_t count = 10;
-    constexpr static const int16_t width = 25;
-    
-		switch (draw_state) {
+        switch (draw_state) {
             case 0:
                 size_t i;
                 for (i = 0; i < count; ++i) {
@@ -399,19 +441,14 @@ class plaid_box : public control<ControlSurfaceType> {
                         }
                     }
                     // random color RGBA8888
-                    //convert(fire_cols[6+(rand()%250)],&cls[i]);
-                    //cls[i].template channel<channel_name::A>((rand()%224)+32);
-                    cls[i] = rgba_pixel<32>((rand() % 256), (rand() % 256), (rand() % 256), (rand() % 224) + 32);
+                    cls[i] = rgba_pixel<32>((rand() % 255), (rand() % 255), (rand() % 255), (rand() % 224) + 32);
                 }
                 draw_state = 1;
                 // fall through
         }
     }
     virtual void on_after_render() {
-    constexpr static const size_t count = 10;
-    constexpr static const int16_t width = 25;
-    
-	    switch (draw_state) {
+        switch (draw_state) {
             case 0:
                 break;
             case 1:
@@ -434,10 +471,7 @@ class plaid_box : public control<ControlSurfaceType> {
         }
     }
     virtual void on_paint(control_surface_type& destination, const srect16& clip) override {
-    constexpr static const size_t count = 10;
-    constexpr static const int16_t width = 25;
-    
-	    // draw the bars
+        // draw the bars
         for (size_t i = 0; i < count; ++i) {
             spoint16& pt = pts[i];
             spoint16& d = dts[i];
@@ -448,101 +482,212 @@ class plaid_box : public control<ControlSurfaceType> {
                 r = srect16(0, pt.y - width / 2, this->bounds().x2, pt.y + width / 2);
             }
             if (clip.intersects(r)) {
-                draw::filled_rectangle(destination, r,cls[i], &clip);
+                rgba_pixel<32>& col = cls[i];
+                draw::filled_rectangle(destination, r, col, &clip);
             }
         }
     }
     virtual bool on_touch(size_t locations_size, const spoint16* locations) override {
-        //fps.visible(true);
+        fps.visible(true);
         return true;
     }
     virtual void on_release() override {
-        //fps.visible(false);
+        fps.visible(false);
     }
 };
 using plaid_box_t = plaid_box<screen_t::control_surface_type>;
 
 // the controls
-static fire_box_t fire(main_screen);
-static alpha_box_t alpha(main_screen);
-static plaid_box_t plaid(main_screen);
-
-void uix_on_touch(point16* out_locations,
-                  size_t* in_out_locations_size,
-                  void* state) {
-    if(!*in_out_locations_size) {
-        return;
+static fire_box_t fire(anim_screen);
+static alpha_box_t alpha(anim_screen);
+static plaid_box_t plaid(anim_screen);
+// initialize the screens and controls
+static void screen_init() {
+    const rgba_pixel<32> transparent(0, 0, 0, 0);
+    alpha.bounds(anim_screen.bounds());
+    fire.bounds(anim_screen.bounds());
+    fire.visible(false);
+    plaid.bounds(anim_screen.bounds());
+    plaid.visible(false);
+    fps.text_color(color32_t::red);
+    fps.text_open_font(&text_font);
+    fps.text_line_height(40);
+    fps.padding({0, 0});
+    rgba_pixel<32> bg(0, 0, 0, 224);
+    fps.background_color(bg);
+    fps.text_justify(uix_justify::bottom_right);
+    fps.bounds(srect16(0, anim_screen.bounds().y2 - fps.text_line_height() + 2, anim_screen.bounds().x2, anim_screen.bounds().y2));
+    fps.visible(false);
+    int y = 0;
+    int lh = anim_screen.dimensions().height / 6 - 2;
+    for (size_t i = 0; i < (sizeof(summaries) / sizeof(label_t)); ++i) {
+        label_t& summary = summaries[i];
+        summary.text_line_height(lh);
+        summary.padding({0, 0});
+        summary.bounds(srect16(0, y, anim_screen.bounds().x2, y + lh + 2));
+        summary.text_open_font(&text_font);
+        summary.border_color(transparent);
+        summary.background_color(transparent);
+        summary.text_color(color32_t::red);
+        summary.text_justify(uix_justify::top_left);
+        summary.visible(false);
+        y += summary.text_line_height() + 2;
     }
-    int x,y;
-    if(read_mouse(&x,&y)) {
-        if(ssize16(SCREEN_SIZE).bounds().intersects(spoint16(x,y))) {
-            *in_out_locations_size =1;
-            *out_locations = point16((unsigned)x,(unsigned)y);
-            return;
-        }
+    anim_screen.register_control(alpha);
+    anim_screen.register_control(fire);
+    anim_screen.register_control(plaid);
+    anim_screen.register_control(fps);
+    for (size_t i = 0; i < (sizeof(summaries) / sizeof(label_t)); ++i) {
+        label_t& summary = summaries[i];
+        anim_screen.register_control(summary);
     }
-    *in_out_locations_size = 0;
-}
-void uix_on_flush(const rect16& bounds, const void* bmp, void* state) {
-	flush_bitmap(bounds.x1,bounds.y1,bounds.x2-bounds.x1+1,bounds.y2-bounds.y1+1,bmp);
-    main_screen.flush_complete();
+    anim_screen.background_color(color_t::black);
+    anim_screen.on_flush_callback(uix_on_flush);
+    anim_screen.on_touch_callback(uix_on_touch);
 }
 void setup() {
     Serial.begin(115200);
-    SD.begin(".\\sd");
-    File f = SD.open("/foo.txt");
-    Serial.println(f.readString());
-    transfer_buffer = (uint8_t *)malloc(transfer_buffer_size);
-    main_screen.dimensions((ssize16)SCREEN_SIZE);
-    main_screen.buffer_size(transfer_buffer_size);
-    main_screen.buffer1(transfer_buffer);
-    main_screen.on_flush_callback(uix_on_flush);
-    main_screen.on_touch_callback(uix_on_touch);
-    main_screen.background_color(color_t::black);
-    alpha.bounds(main_screen.bounds());
-    main_screen.register_control(alpha);
-    fire.bounds(main_screen.bounds());
-    fire.visible(false);
-    main_screen.register_control(fire);
-    plaid.bounds(main_screen.bounds());
-    plaid.visible(false);
-    main_screen.register_control(plaid);
-    Serial.println("alpha");
+    // init the UI screen
+    screen_init();
 }
 void loop() {
-    static int ts = 0;
-    if(ts==0) { ts = millis(); }
-    if(millis()>ts+1000) {
-        ts = millis();
+    constexpr static const int run_seconds = 5;
+    constexpr static const int summary_seconds = 10;
+    static char szsummaries[sizeof(summaries) / sizeof(label_t)][128];
+    static int seconds = 0;
+    static int frames = 0;
+    static int total_frames_alpha = 0;
+    static int total_frames_fire = 0;
+    static int total_frames_plaid = 0;
+    static int fps_alpha[run_seconds];
+    static int fps_fire[run_seconds];
+    static int fps_plaid[run_seconds];
+    static bool showed_summary = false;
+    static int fps_index = 0;
+    static char szfps[32];
+    static uint32_t fps_ts = 0;
+    uint32_t ms = millis();
+
+    ++frames;
+
+    if (ms > fps_ts + 1000) {
+        fps_ts = ms;
+        snprintf(szfps, sizeof(szfps), "fps: %d", frames);
+        Serial.println(szfps);
+        fps.text(szfps);
+        if (alpha.visible()) {
+            fps_alpha[fps_index++] = frames;
+        } else if (fire.visible()) {
+            fps_fire[fps_index++] = frames;
+        } else if (plaid.visible()) {
+            fps_plaid[fps_index++] = frames;
+        }
+        frames = 0;
         ++seconds;
     }
-    if(seconds==5) {
+    if (alpha.visible()) {
+        alpha.invalidate();
+        ++total_frames_alpha;
+    } else if (fire.visible()) {
+        fire.invalidate();
+        ++total_frames_fire;
+    } else if (plaid.visible()) {
+        plaid.invalidate();
+        ++total_frames_plaid;
+    }
+    if (seconds == (run_seconds * 1)) {
         alpha.visible(false);
         fire.visible(true);
         plaid.visible(false);
-        if(printed!=5) {
-            Serial.println("fire");
-            printed = 5;
+        for (size_t i = 0; i < (sizeof(summaries) / sizeof(label_t)); ++i) {
+            label_t& summary = summaries[i];
+            summary.visible(false);
         }
-    }
-    if(seconds==10) {
+        fps_index = 0;
+    } else if (seconds == (run_seconds * 2)) {
         alpha.visible(false);
         fire.visible(false);
         plaid.visible(true);
-        if(printed!=10) {
-            
-            Serial.println("plaid");
-            printed = 10;
+        for (size_t i = 0; i < (sizeof(summaries) / sizeof(label_t)); ++i) {
+            label_t& summary = summaries[i];
+            summary.visible(false);
         }
-    }
-    if(seconds>=15) {
-        printed = 0;
+        fps_index = 0;
+    } else if (seconds == (run_seconds * 3)) {
+        if (!showed_summary) {
+            showed_summary = true;
+            alpha.visible(false);
+            fire.visible(false);
+            plaid.visible(false);
+            for (size_t i = 0; i < (sizeof(summaries) / sizeof(label_t)); ++i) {
+                label_t& summary = summaries[i];
+                summary.visible(true);
+            }
+            int alpha_fps_max = 0, alpha_fps_sum = 0;
+            for (size_t i = 0; i < run_seconds; ++i) {
+                int fps = fps_alpha[i];
+                if (fps > alpha_fps_max) {
+                    alpha_fps_max = fps;
+                }
+                alpha_fps_sum += fps;
+            }
+            int fire_fps_max = 0, fire_fps_sum = 0;
+            for (size_t i = 0; i < run_seconds; ++i) {
+                int fps = fps_fire[i];
+                if (fps > fire_fps_max) {
+                    fire_fps_max = fps;
+                }
+                fire_fps_sum += fps;
+            }
+            int plaid_fps_max = 0, plaid_fps_sum = 0;
+            for (size_t i = 0; i < run_seconds; ++i) {
+                int fps = fps_plaid[i];
+                if (fps > plaid_fps_max) {
+                    plaid_fps_max = fps;
+                }
+                plaid_fps_sum += fps;
+            }
+            strcpy(szsummaries[0], "alpha max/avg/frames");
+            Serial.println(szsummaries[0]);
+            summaries[0].text(szsummaries[0]);
+            sprintf(szsummaries[1], "%d/%d/%d", alpha_fps_max,
+                    (int)roundf((float)alpha_fps_sum / (float)run_seconds),
+                    total_frames_alpha);
+            Serial.println(szsummaries[1]);
+            summaries[1].text(szsummaries[1]);
+            strcpy(szsummaries[2], "fire max/avg/frames");
+            Serial.println(szsummaries[2]);
+            summaries[2].text(szsummaries[2]);
+            sprintf(szsummaries[3], "%d/%d/%d", fire_fps_max,
+                    (int)roundf((float)fire_fps_sum / (float)run_seconds),
+                    total_frames_fire);
+            summaries[3].text(szsummaries[3]);
+            Serial.println(szsummaries[3]);
+            strcpy(szsummaries[4], "plaid max/avg/frames");
+            summaries[4].text(szsummaries[4]);
+            Serial.println(szsummaries[4]);
+            sprintf(szsummaries[5], "%d/%d/%d", plaid_fps_max,
+                    (int)roundf((float)plaid_fps_sum / (float)run_seconds),
+                    total_frames_plaid);
+            Serial.println(szsummaries[5]);
+            summaries[5].text(szsummaries[5]);
+            fps_index = 0;
+        }
+    } else if (seconds >= (run_seconds * 3) + summary_seconds) {
+        seconds = 0;
+        total_frames_alpha = 0;
+        total_frames_fire = 0;
+        total_frames_plaid = 0;
         alpha.visible(true);
         fire.visible(false);
         plaid.visible(false);
-        Serial.println("alpha");
-        seconds = 0;
+        for (size_t i = 0; i < (sizeof(summaries) / sizeof(label_t)); ++i) {
+            label_t& summary = summaries[i];
+            summary.visible(false);
+        }
+        fps_index = 0;
+        showed_summary = false;
     }
-    main_screen.invalidate();
-    main_screen.update();
+
+    anim_screen.update();
 }

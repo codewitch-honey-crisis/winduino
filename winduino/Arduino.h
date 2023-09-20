@@ -139,7 +139,7 @@ void attachInterrupt(uint8_t pin, void (*)(void), int mode);
 void detachInterrupt(uint8_t pin);
 
 const char * pathToFileName(const char * path);
-void append_log(const char* text);
+void append_log_window(const char* text);
 /// @brief The start routine - similar to main()
 void setup();
 /// @brief The loop() routine, as in Arduino

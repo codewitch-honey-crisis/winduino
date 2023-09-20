@@ -136,13 +136,13 @@ bool read_mouse(int* out_x,int *out_y) {
                              INFINITE)) {   // no time-out interval)
 
         if (mouse_req) {
-            if (mouse_state) {
+            if (mouse_state ) {
                 *out_x = mouse_loc.x;
                 *out_y = mouse_loc.y;
             }
             mouse_req = 0;
             ReleaseMutex(render_mutex);
-            return true;
+            return mouse_state;
         }
         ReleaseMutex(render_mutex);
     }
@@ -170,7 +170,7 @@ void delay(uint32_t ms) {
     while(millis()<end);
 }
 // write to the log window
-void append_log(const char* text) {
+void append_log_window(const char* text) {
    int index = GetWindowTextLength (hwnd_log);
    SetFocus (hwnd_log); // set focus
    SendMessageA(hwnd_log, EM_SETSEL, (WPARAM)index, (LPARAM)index); // set selection - end of text
