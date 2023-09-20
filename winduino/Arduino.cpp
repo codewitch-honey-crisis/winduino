@@ -272,7 +272,7 @@ int main(int argc, char* argv[]) {
         D2D1_BITMAP_PROPERTIES props;
         render_target->GetDpi(&props.dpiX, &props.dpiY);
         D2D1_PIXEL_FORMAT pixelFormat = D2D1::PixelFormat(
-        #ifdef USE_RGBA8888
+        #ifdef USE_RGB
             DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
         #else
             DXGI_FORMAT_B8G8R8A8_UNORM,

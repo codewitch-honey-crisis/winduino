@@ -1,5 +1,6 @@
 #pragma once
 #define ARDUINO
+#define WINDUINO
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdarg.h>
