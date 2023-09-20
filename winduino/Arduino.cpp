@@ -135,16 +135,14 @@ bool read_mouse(int* out_x,int *out_y) {
                              render_mutex,  // handle to mutex
                              INFINITE)) {   // no time-out interval)
 
-        if (mouse_req) {
-            if (mouse_state ) {
-                *out_x = mouse_loc.x;
-                *out_y = mouse_loc.y;
-            }
-            mouse_req = 0;
-            ReleaseMutex(render_mutex);
-            return mouse_state;
-        }
+        if (mouse_state) {
+            *out_x = mouse_loc.x;
+            *out_y = mouse_loc.y;
+        } 
+        mouse_req = 0;
         ReleaseMutex(render_mutex);
+        return mouse_state;
+    
     }
     return false;
 }

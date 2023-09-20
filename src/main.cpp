@@ -245,11 +245,11 @@ class fire_box : public control<ControlSurfaceType> {
         }
     }
     virtual bool on_touch(size_t locations_size, const spoint16* locations) override {
-        //fps.visible(true);
+        fps.visible(true);
         return true;
     }
     virtual void on_release() override {
-        //fps.visible(false);
+        fps.visible(false);
     }
 };
 using fire_box_t = fire_box<typename screen_t::control_surface_type>;
