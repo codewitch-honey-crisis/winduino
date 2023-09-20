@@ -120,11 +120,22 @@ void uix_on_touch(point16* out_locations,
     }
     int x,y;
     if(read_mouse(&x,&y)) {
-        if(ssize16(SCREEN_SIZE).bounds().intersects(spoint16(x,y))) {
-            *in_out_locations_size =1;
-            *out_locations = point16((unsigned)x,(unsigned)y);
-            return;
+        if(x<0) {
+            x=0;
         }
+        if(x>=screen_size.width) {
+            x=screen_size.width-1;
+        }
+        if(y<0) {
+            y=0;
+        }
+        if(y>=screen_size.height) {
+            y=screen_size.height-1;
+        }
+        *in_out_locations_size =1;
+        *out_locations = point16((unsigned)x,(unsigned)y);
+        return;
+    
     }
     *in_out_locations_size = 0;
 }
@@ -356,21 +367,26 @@ class alpha_box : public control<ControlSurfaceType> {
         // draw the circles
         for (size_t i = 0; i < count; ++i) {
             spoint16& pt = pts[i];
-            spoint16& d = dts[i];
             srect16 r(pt, radius);
             if (clip.intersects(r)) {
                 rgba_pixel<32>& col = cls[i];
                 draw::filled_ellipse(destination, r, col, &clip);
             }
+        }
+    }
+    virtual void on_after_render() {
+        for (size_t i = 0; i < count; ++i) {
+            spoint16& pt = pts[i];
+            spoint16& d = dts[i];
             // move the circle
             pt.x += d.x;
             pt.y += d.y;
             // if it is about to hit the edge, invert
             // the respective deltas
-            if (pt.x + d.x + -radius <= 0 || pt.x + d.x + radius >= destination.bounds().x2) {
+            if (pt.x + d.x + -radius <= 0 || pt.x + d.x + radius >= this->dimensions().bounds().x2) {
                 d.x = -d.x;
             }
-            if (pt.y + d.y + -radius <= 0 || pt.y + d.y + radius >= destination.bounds().y2) {
+            if (pt.y + d.y + -radius <= 0 || pt.y + d.y + radius >= this->dimensions().bounds().y2) {
                 d.y = -d.y;
             }
         }
