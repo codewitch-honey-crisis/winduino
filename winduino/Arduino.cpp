@@ -193,10 +193,35 @@ static LRESULT CALLBACK WindowProcGpio(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
             GetWindowTextW((HWND)lParam,sz,sizeof(sz)/sizeof(wchar_t));
             sz[63]=0;
             if(0==wcsicmp(sz,L"LOW")) {
-                Serial.printf("Set %d LOW\r\n",gpio);
+                if(g.interrupt_cb!=nullptr) {
+                    switch(g.interrupt_mode) {
+                        case FALLING:
+                        case LOW:
+                        case CHANGE:
+                            if(g.value!=LOW) {
+                                g.value=LOW;
+                                g.interrupt_cb();
+                            }
+                        break;
+                        default:
+                        break;
+                    }
+                }
                 g.value=LOW;
             } else if(0==wcsicmp(sz,L"HIGH")) {
-                Serial.printf("Set %d HIGH\r\n",gpio);
+                if(g.interrupt_cb!=nullptr) {
+                    switch(g.interrupt_mode) {
+                        case RISING:
+                        case CHANGE:
+                            if(g.value!=HIGH) {
+                                g.value=HIGH;
+                                g.interrupt_cb();
+                            }
+                        break;
+                        default:
+                        break;
+                    }
+                }
                 g.value=HIGH;
             } else {
                 size_t l = wcslen(sz);
@@ -208,7 +233,40 @@ static LRESULT CALLBACK WindowProcGpio(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     }
                 }
                 if(isnum) {
-                    g.value = _wtoi(sz);
+                    int v = _wtoi(sz);
+                    if(g.interrupt_cb!=nullptr) {
+                        switch(g.interrupt_mode) {
+                            case RISING:
+                                if(v!=LOW&&g.value==LOW) {
+                                    g.value=v;
+                                    g.interrupt_cb();
+                                }
+                                break;
+                            case FALLING:
+                                if(v==LOW&&g.value!=LOW) {
+                                    g.value=v;
+                                    g.interrupt_cb();
+                                }
+                                break;
+                            case LOW:
+                                if(v==LOW) {
+                                    g.value=v;
+                                    g.interrupt_cb();
+                                }
+                                break;
+                            case CHANGE:
+                                if(!!g.value!=!!v) {
+                                    g.value=v;
+                                    g.interrupt_cb();
+                                }
+                                break;
+                            break;
+                            default:
+                            break;
+                        }
+                    }
+                    g.value = v;
+                    
                 }
             }
         }
@@ -659,7 +717,9 @@ uint16_t analogRead(uint8_t pin) {
     return 0;
 }
 void attachInterrupt(uint8_t pin, void (*cb)(void), int mode) {
-    pinMode(pin,INPUT);
+    if(!gpios[pin].is_input()) {
+        pinMode(pin,INPUT);
+    }
     gpios[pin].interrupt_mode = mode;
     gpios[pin].interrupt_cb = cb;
 }

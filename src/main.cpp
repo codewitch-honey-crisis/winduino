@@ -566,8 +566,11 @@ static void screen_init() {
 void setup() {
     Serial.begin(115200);
     pinMode(17,OUTPUT);
-    pinMode(18,INPUT_PULLDOWN);
     digitalWrite(17,HIGH);
+    attachInterrupt(18,[]() {
+        Serial.println("Rise!");
+    }, RISING);
+    
     // init the UI screen
     screen_init();
 }
