@@ -200,7 +200,9 @@ static LRESULT CALLBACK WindowProcGpio(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                         case CHANGE:
                             if(g.value!=LOW) {
                                 g.value=LOW;
+                                is_isr = true;
                                 g.interrupt_cb();
+                                is_isr = false;
                             }
                         break;
                         default:
@@ -215,7 +217,9 @@ static LRESULT CALLBACK WindowProcGpio(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                         case CHANGE:
                             if(g.value!=HIGH) {
                                 g.value=HIGH;
+                                is_isr = true;
                                 g.interrupt_cb();
+                                is_isr = false;
                             }
                         break;
                         default:
@@ -239,25 +243,33 @@ static LRESULT CALLBACK WindowProcGpio(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                             case RISING:
                                 if(v!=LOW&&g.value==LOW) {
                                     g.value=v;
+                                    is_isr = true;
                                     g.interrupt_cb();
+                                    is_isr = false;
                                 }
                                 break;
                             case FALLING:
                                 if(v==LOW&&g.value!=LOW) {
                                     g.value=v;
+                                    is_isr = true;
                                     g.interrupt_cb();
+                                    is_isr = false;
                                 }
                                 break;
                             case LOW:
                                 if(v==LOW) {
                                     g.value=v;
+                                    is_isr = true;
                                     g.interrupt_cb();
+                                    is_isr = false;
                                 }
                                 break;
                             case CHANGE:
                                 if(!!g.value!=!!v) {
                                     g.value=v;
+                                    is_isr = true;
                                     g.interrupt_cb();
+                                    is_isr = false;
                                 }
                                 break;
                             break;
