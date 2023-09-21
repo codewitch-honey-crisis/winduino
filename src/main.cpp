@@ -109,6 +109,8 @@ constexpr static const int lcd_screen_size = bitmap<typename screen_t::pixel_typ
 constexpr static const int lcd_buffer_size = lcd_screen_size > 64 * 1024 ? 64 * 1024 : lcd_screen_size;
 static uint8_t lcd_buffer1[lcd_buffer_size];
 
+
+
 // the main screen
 screen_t anim_screen({screen_size.width,screen_size.height}, sizeof(lcd_buffer1), lcd_buffer1, nullptr);
 
@@ -563,6 +565,9 @@ static void screen_init() {
 }
 void setup() {
     Serial.begin(115200);
+    pinMode(17,OUTPUT);
+    pinMode(18,INPUT_PULLDOWN);
+    digitalWrite(17,HIGH);
     // init the UI screen
     screen_init();
 }
@@ -583,7 +588,7 @@ void loop() {
     static char szfps[32];
     static uint32_t fps_ts = 0;
     uint32_t ms = millis();
-
+    static bool toggle = true;
     ++frames;
 
     if (ms > fps_ts + 1000) {
@@ -600,6 +605,11 @@ void loop() {
         }
         frames = 0;
         ++seconds;
+        digitalWrite(17,toggle?HIGH:LOW);
+        Serial.print(toggle?"17: HIGH\r\n":"17: LOW\r\n");
+        toggle=!toggle;
+        Serial.print(digitalRead(18)==LOW?"18: LOW\r\n":"18: HIGH\r\n");
+        
     }
     if (alpha.visible()) {
         alpha.invalidate();

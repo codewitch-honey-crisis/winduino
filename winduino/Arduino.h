@@ -128,17 +128,28 @@ SCREEN_SIZE;
 /// @brief Reports the milliseconds since the app started
 /// @return The number of milliseconds elapsed
 uint32_t millis();
+
+/// @brief Reports the microseconds since the app started
+/// @return The number of microseconds elapsed
+uint32_t micros();
+
 /// @brief Delays for the number of milliseconds
 /// @return The number of milliseconds to delay
 void delay(uint32_t ms);
 
+/// @brief Delays for the number of microseconds
+/// @return The number of milliseconds to delay
+void delayMicroseconds(uint32_t us);
+
 void pinMode(uint8_t pin, uint8_t mode);
 void digitalWrite(uint8_t pin, uint8_t val);
 int digitalRead(uint8_t pin);
-
+inline uint8_t digitalPinToInterrupt(uint8_t pin) { return pin; }
 void attachInterrupt(uint8_t pin, void (*)(void), int mode);
 void detachInterrupt(uint8_t pin);
-
+void analogWrite(uint8_t pin, int value);
+uint16_t analogRead(uint8_t pin);
+inline void analogWriteResolution(uint8_t bits) {}
 const char * pathToFileName(const char * path);
 void append_log_window(const char* text);
 /// @brief The start routine - similar to main()
