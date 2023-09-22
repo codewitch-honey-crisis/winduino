@@ -215,7 +215,7 @@ static LRESULT CALLBACK WindowProcGpio(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     switch(g.interrupt_mode) {
                         case RISING:
                         case CHANGE:
-                            if(g.value!=HIGH) {
+                            if(g.value==LOW) {
                                 g.value=HIGH;
                                 is_isr = true;
                                 g.interrupt_cb();
@@ -238,7 +238,7 @@ static LRESULT CALLBACK WindowProcGpio(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                 }
                 if(isnum) {
                     int v = _wtoi(sz);
-                    if(g.interrupt_cb!=nullptr) {
+                    if(g.interrupt_cb!=nullptr && v!=g.value) {
                         switch(g.interrupt_mode) {
                             case RISING:
                                 if(v!=LOW&&g.value==LOW) {
