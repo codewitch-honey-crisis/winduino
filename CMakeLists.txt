@@ -48,6 +48,9 @@ target_include_directories(winduino PUBLIC
                           "${PROJECT_SOURCE_DIR}/lib/htcw_gfx/include"
                           "${PROJECT_SOURCE_DIR}/lib/htcw_uix/include"
 
+                          "${PROJECT_SOURCE_DIR}/lib/htcw_tft_io/include"
+                          "${PROJECT_SOURCE_DIR}/lib/htcw_st7789/include"
+                          
                           "${PROJECT_BINARY_DIR}"
                           "${PROJECT_SOURCE_DIR}/include"
                           )

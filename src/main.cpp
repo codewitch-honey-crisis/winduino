@@ -6,9 +6,14 @@
 #include <gfx.hpp>
 #include <uix.hpp>
 #include "spi_screen.h"
+#include <tft_io.hpp>
+#include <st7789.hpp>
 using namespace gfx;
 using namespace uix;
+using namespace arduino;
 
+using bus_t = tft_spi<0,5>;
+using lcd_t = st7789<135,240,2,4,15,bus_t,1>;
 // creates a BGRx pixel by making each channel 
 // one quarter of the whole. Any remainder bits
 // are added to the green channel. One channel
@@ -101,9 +106,11 @@ static const open_font& text_font = architects_daughter;
 // declare the format of the screen
 using screen_t = screen<bgrx_pixel<32>>;
 using color_t = color<typename screen_t::pixel_type>;
+using color2_t = color<typename lcd_t::pixel_type>;
 // for access to RGB8888 colors which controls use
 using color32_t = color<rgba_pixel<32>>;
 
+lcd_t lcd2;
 // UIX allows you to use two buffers for maximum DMA efficiency
 // you don't have to, but performance is significantly better
 // declare 64KB across two buffers for transfer
@@ -573,7 +580,6 @@ void setup() {
 #define TFT_RAMWR 0x2C
 #define TFT_RAMRD 0x2E
 
-
     void* hw_screen = hardware_load(LIB_SPI_SCREEN);
     if(hw_screen==nullptr) {
         Serial.println("Unable to load external SPI screen");
@@ -582,46 +588,35 @@ void setup() {
         uint16_t width;
         uint16_t height;
     } screen_size = {240,135};
-    
+    struct {
+        int16_t x;
+        int16_t y;
+    } screen_offsets = {40,53};
     hardware_attach_log(hw_screen);
     if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
+        Serial.println("Unable to configure hardware");
+    }
+    if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_OFFSETS,&screen_offsets,sizeof(screen_offsets))) {
         Serial.println("Unable to configure hardware");
     }
     hardware_set_pin(hw_screen,15, SPI_SCREEN_PIN_BKL);    
     hardware_set_pin(hw_screen,5, SPI_SCREEN_PIN_CS);
     hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
     hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
-    pinMode(2,OUTPUT);
-    pinMode(4,OUTPUT);
-    pinMode(15,OUTPUT);
-    digitalWrite(15,LOW);
-    digitalWrite(4,HIGH);
-    delay(100);
-    digitalWrite(4,LOW);
-    delay(100);
-    SPI.begin(18,19,23,5);
-    SPISettings settings(40*1000*1000,MSBFIRST,SPI_MODE0);
-    SPI.beginTransaction(settings);
-    digitalWrite(2,LOW);
-    SPI.transfer(TFT_CASET);
-    digitalWrite(2,HIGH);
-    SPI.transfer16(0);
-    SPI.transfer16(239);
-    digitalWrite(2,LOW);
-    SPI.transfer(TFT_PASET);
-    digitalWrite(2,HIGH);
-    SPI.transfer16(0);
-    SPI.transfer16(134);
-    digitalWrite(2,LOW);
-    SPI.transfer(TFT_RAMWR);
-    digitalWrite(2,HIGH);
-    size_t to_write = screen_size.width*screen_size.height;
-    while(to_write--) {
-        SPI.transfer16(0xFFFF);
-    }
-    SPI.endTransaction();
-    digitalWrite(15,HIGH);
-    
+
+open_text_info oti;
+oti.font = &text_font;
+oti.scale = oti.font->scale(50);
+oti.text = "Hello world!";
+oti.transparent_background = false;
+lcd2.initialize();
+auto bmp = create_bitmap_from(lcd2,{screen_size.width,screen_size.height});
+if(bmp.begin()) {
+    draw::text(bmp,bmp.bounds(),oti,color2_t::wheat);
+    draw::bitmap(lcd2,lcd2.bounds(),bmp,bmp.bounds());
+    free(bmp.begin());
+}
+    //lcd2.fill({0,0,49,49},color2_t::red);
 #endif
     pinMode(17,OUTPUT);
     digitalWrite(17,HIGH);
@@ -655,7 +650,7 @@ void loop() {
     if (ms > fps_ts + 1000) {
         fps_ts = ms;
         snprintf(szfps, sizeof(szfps), "fps: %d", frames);
-        Serial.println(szfps);
+        //Serial.println(szfps);
         fps.text(szfps);
         if (alpha.visible()) {
             fps_alpha[fps_index++] = frames;
@@ -667,9 +662,7 @@ void loop() {
         frames = 0;
         ++seconds;
         digitalWrite(17,toggle?HIGH:LOW);
-        Serial.print(toggle?"17: HIGH\r\n":"17: LOW\r\n");
         toggle=!toggle;
-        Serial.print(digitalRead(18)==LOW?"18: LOW\r\n":"18: HIGH\r\n");
         
     }
     if (alpha.visible()) {
@@ -735,28 +728,28 @@ void loop() {
                 plaid_fps_sum += fps;
             }
             strcpy(szsummaries[0], "alpha max/avg/frames");
-            Serial.println(szsummaries[0]);
+            //Serial.println(szsummaries[0]);
             summaries[0].text(szsummaries[0]);
             sprintf(szsummaries[1], "%d/%d/%d", alpha_fps_max,
                     (int)roundf((float)alpha_fps_sum / (float)run_seconds),
                     total_frames_alpha);
-            Serial.println(szsummaries[1]);
+            //Serial.println(szsummaries[1]);
             summaries[1].text(szsummaries[1]);
             strcpy(szsummaries[2], "fire max/avg/frames");
-            Serial.println(szsummaries[2]);
+            //Serial.println(szsummaries[2]);
             summaries[2].text(szsummaries[2]);
             sprintf(szsummaries[3], "%d/%d/%d", fire_fps_max,
                     (int)roundf((float)fire_fps_sum / (float)run_seconds),
                     total_frames_fire);
             summaries[3].text(szsummaries[3]);
-            Serial.println(szsummaries[3]);
+            //Serial.println(szsummaries[3]);
             strcpy(szsummaries[4], "plaid max/avg/frames");
             summaries[4].text(szsummaries[4]);
-            Serial.println(szsummaries[4]);
+            //Serial.println(szsummaries[4]);
             sprintf(szsummaries[5], "%d/%d/%d", plaid_fps_max,
                     (int)roundf((float)plaid_fps_sum / (float)run_seconds),
                     total_frames_plaid);
-            Serial.println(szsummaries[5]);
+            //Serial.println(szsummaries[5]);
             summaries[5].text(szsummaries[5]);
             fps_index = 0;
         }

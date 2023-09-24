@@ -27,6 +27,11 @@ static struct {
     uint16_t width;
     uint16_t height;
 } screen_size = {320, 240};
+static struct {
+    int16_t x;
+    int16_t y;
+} screen_offsets = {0, 0};
+
 typedef struct input {
     void* read_state;
     bool has_cached_value;
@@ -57,8 +62,10 @@ typedef struct input {
 typedef enum states {
     STATE_INITIAL = 0,
     STATE_IGNORING,
-    STATE_COLSET,
-    STATE_ROWSET,
+    STATE_COLSET1,
+    STATE_COLSET2,
+    STATE_ROWSET1,
+    STATE_ROWSET2,
     STATE_WRITE,
     STATE_READ
 } states_t;
@@ -70,9 +77,6 @@ static uint8_t write = TFT_RAMWR;
 static uint8_t read = TFT_RAMRD;
 static uint16_t col_start = 0, col_end = 0, row_start = 0, row_end = 0;
 static int cmd = -1;
-static uint8_t* cmd_args = nullptr;
-static size_t cmd_args_size = 0;
-static size_t cmd_args_cap = 0;
 static uint8_t in_byte = 0;
 static int bit_count = 0;
 static input_t cs;
@@ -80,7 +84,7 @@ static input_t dc;
 static input_t rst;
 static input_t bkl;
 static uint8_t* frame_buffer;
-static uint16_t write_col = 0;
+static uint16_t data_word = 0;
 static size_t bytes_written = 0, bytes_read = 0;
 static uint16_t column = 0, row = 0;
 static int offset = 0;
@@ -93,7 +97,7 @@ static HANDLE screen_ready = NULL;
 static log_callback logger = NULL;
 static HMODULE hInstance = NULL;
 static bool in_pixel_transfer = false;
-
+static volatile DWORD render_changed = 1;
 // directX stuff
 static ID2D1HwndRenderTarget* render_target = nullptr;
 static ID2D1Factory* d2d_factory = nullptr;
@@ -297,23 +301,27 @@ static uint8_t process_byte(uint8_t val) {
             case STATE_WRITE:
                 switch (offset) {
                     case 0:
-                        write_col = val << 8;
-                        ++offset;
+                        data_word = val << 8;
+                        offset=1;
                         ++bytes_written;
                         break;
                     case 1:
                         if (in_pixel_transfer) {
-                            write_col |= val;
-                            uint8_t r = ((float)((write_col >> 11) & 31) / 31.0f) * 255;
-                            uint8_t g = ((float)((write_col >> 5) & 63) / 63.0f) * 255;
-                            uint8_t b = ((float)((write_col >> 0) & 31) / 31.0f) * 255;
+                            data_word |= val;
+                            int x = column- screen_offsets.x;
+                            int y = row - screen_offsets.y;
+                            if (x >= 0 && x < screen_size.width && y >= 0 && y < screen_size.height) {
+                                uint8_t r = ((float)((data_word >> 11) & 31) / 31.0f) * 255;
+                                uint8_t g = ((float)((data_word >> 5) & 63) / 63.0f) * 255;
+                                uint8_t b = ((float)((data_word >> 0) & 31) / 31.0f) * 255;
 
-                            uint8_t* p = frame_buffer + ((column + screen_size.width * row) * 4);
-                            *p++ = b;
-                            *p++ = g;
-                            *p++ = r;
-                            *p = 0xFF;
-
+                                uint8_t* p = frame_buffer + ((x + screen_size.width * y) * 4);
+                                *p++ = b;
+                                *p++ = g;
+                                *p++ = r;
+                                *p = 0xFF;
+                                InterlockedExchange(&render_changed,1);
+                            }
                             ++column;
                             if (column > col_end) {
                                 ++row;
@@ -329,66 +337,63 @@ static uint8_t process_byte(uint8_t val) {
                             }
                             ++bytes_written;
                             offset = 0;
+                            if (bytes_written == sizeof(uint16_t) * (row_end - row_start + 1) * (col_start - col_end + 1)) {
+                                if (in_pixel_transfer) {
+                                    ReleaseMutex(render_mutex);
+                                }
+                                in_pixel_transfer = false;
+                                st = STATE_IGNORING;
+                            }
                         }
                         break;
                 }
 
                 break;
 
-            default:
-                if (cmd_args_cap == 0) {
-                    cmd_args_cap = 16;
-                    cmd_args_size = 0;
-                    cmd_args = (uint8_t*)malloc(cmd_args_cap);
-                    if (cmd_args == nullptr) {
-                        return 0;
-                    }
-                } else if (cmd_args == nullptr) {
-                    return 0;
+            case STATE_COLSET1:
+                if (offset == 0) {
+                    data_word = val << 8;
+                    offset = 1;
+                } else {
+                    data_word |= val;
+                    offset = 0;
+                    col_start = data_word;
+                    st = STATE_COLSET2;
                 }
-                if (cmd_args_size >= cmd_args_cap) {
-                    cmd_args_cap += (cmd_args_cap * .8);
-                    cmd_args = (uint8_t*)realloc(cmd_args, cmd_args_cap);
-                    if (cmd_args == nullptr) {
-                        return 0;
-                    }
+                break;
+            case STATE_COLSET2:
+                if (offset == 0) {
+                    data_word = val << 8;
+                    offset = 1;
+                } else {
+                    data_word |= val;
+                    offset = 0;
+                    col_end = data_word;
+                    st = STATE_IGNORING;
+                    //logfmt("col_start: %d, col_end: %d",col_start,col_end);
                 }
-                cmd_args[cmd_args_size++] = val;
-                switch (st) {
-                    case STATE_COLSET:
-                        if (cmd_args_size == 4) {
-                            uint16_t r = cmd_args[0] << 8;
-                            r |= cmd_args[1];
-                            col_start = r;
-                            r = cmd_args[2] << 8;
-                            r |= cmd_args[3];
-                            col_end = r;
-                            cmd_args_size = 0;
-                            column = col_start;
-                            st = STATE_IGNORING;
-                        }
-                        break;
-                    case STATE_ROWSET:
-                        if (cmd_args_size == 4) {
-                            uint16_t r = cmd_args[0] << 8;
-                            r |= cmd_args[1];
-                            row_start = r;
-                            row = row_start;
-                            r = cmd_args[2] << 8;
-                            r |= cmd_args[3];
-                            row_end = r;
-                            cmd_args_size = 0;
-                            st = STATE_IGNORING;
-                        }
-                    case STATE_WRITE:
-                        if (bytes_written == sizeof(uint16_t) * (row_end - row_start + 1) * (col_start - col_end + 1)) {
-                            if (in_pixel_transfer) {
-                                ReleaseMutex(render_mutex);
-                            }
-                            in_pixel_transfer = false;
-                            st = STATE_IGNORING;
-                        }
-                        break;
+                break;
+            case STATE_ROWSET1:
+                if (offset == 0) {
+                    data_word = val << 8;
+                    offset = 1;
+                } else {
+                    data_word |= val;
+                    offset = 0;
+                    row_start = data_word;
+                    st = STATE_ROWSET2;
+                }
+                break;
+            case STATE_ROWSET2:
+                if (offset == 0) {
+                    data_word = val << 8;
+                    offset = 1;
+                } else {
+                    data_word |= val;
+                    offset = 0;
+                    row_end = data_word;
+                    st = STATE_IGNORING;
+                    //logfmt("row_start: %d, row_end: %d",row_start,row_end);
                 }
                 break;
         }
@@ -397,23 +402,39 @@ static uint8_t process_byte(uint8_t val) {
         bytes_written = 0;
         bytes_read = 0;
         cmd = val;
-        logfmt("cmd: %d", cmd);
+        if (cmd == colset) {
+            logfmt("cmd: COLSET");
+        } else if (cmd == rowset) {
+            logfmt("cmd: ROWSET");
+        } else if (cmd == write) {
+            logfmt("cmd: RAMWR");
+        } else {
+            logfmt("cmd: %02X", cmd);
+        }
         if (cmd == colset) {
             if (in_pixel_transfer) {
                 ReleaseMutex(render_mutex);
             }
             in_pixel_transfer = false;
-            st = STATE_COLSET;
+            data_word = 0;
+            offset = 0;
+            st = STATE_COLSET1;
         } else if (cmd == rowset) {
             if (in_pixel_transfer) {
                 ReleaseMutex(render_mutex);
             }
             in_pixel_transfer = false;
-            st = STATE_ROWSET;
+            data_word = 0;
+            offset = 0;
+            st = STATE_ROWSET1;
         } else if (cmd == write) {
             if (in_pixel_transfer) {
                 ReleaseMutex(render_mutex);
             }
+            offset = 0;
+            data_word = 0;
+            column = col_start;
+            row = row_start;
             in_pixel_transfer = false;
             wr = WaitForSingleObject(screen_ready, INFINITE);
             if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
@@ -434,6 +455,10 @@ static uint8_t process_byte(uint8_t val) {
             if (in_pixel_transfer) {
                 ReleaseMutex(render_mutex);
             }
+            offset = 0;
+            data_word = 0;
+            column = col_start;
+            row = row_start;
             in_pixel_transfer = false;
             wr = WaitForSingleObject(screen_ready, INFINITE);
             if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
@@ -453,7 +478,6 @@ static uint8_t process_byte(uint8_t val) {
             }
             in_pixel_transfer = false;
             st = STATE_IGNORING;
-            cmd_args_size = 0;
         }
     }
     return val;
@@ -461,7 +485,8 @@ static uint8_t process_byte(uint8_t val) {
 static DWORD render_thread_proc(void* state) {
     bool quit = false;
     while (!quit) {
-        if (frame_buffer && render_target && render_bitmap) {
+        
+        if (0!=render_changed && frame_buffer && render_target && render_bitmap) {
             if (WAIT_OBJECT_0 == WaitForSingleObject(
                                      render_mutex,  // handle to mutex
                                      INFINITE)) {   // no time-out interval)
@@ -476,6 +501,7 @@ static DWORD render_thread_proc(void* state) {
                                           rect_dest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR, NULL);
                 render_target->EndDraw();
                 ReleaseMutex(render_mutex);
+                InterlockedExchange(&render_changed,0);
             }
         }
         if (WAIT_OBJECT_0 == WaitForSingleObject(quit_event, 0)) {
@@ -485,15 +511,14 @@ static DWORD render_thread_proc(void* state) {
     return 0;
 }
 static void on_rst_changed(void* state) {
-    if (reset_state == 0) {
-        if (rst.value()) {
-            reset_state = 1;
-            return;
+    if (reset_state == 2 && !rst.value()) {
+        reset_state = 0;
+        if (quit_event != NULL) {
+            SetEvent(quit_event);
         }
-    } else {
-        if (!rst.value()) {
-            reset_state = 2;
-        }
+    }
+    if (rst.value()) {
+        ++reset_state;
     }
     if (reset_state == 2) {
         HRESULT hr;
@@ -510,10 +535,6 @@ static void on_rst_changed(void* state) {
         }
         if (quit_event == NULL) {
             CreateThread(NULL, 4000, window_thread_proc, NULL, 0, NULL);
-        }
-    } else {  // off
-        if (quit_event != NULL) {
-            SetEvent(quit_event);
         }
     }
 }
@@ -556,6 +577,12 @@ int CALL Configure(int prop, void* data, size_t size) {
         case SPI_SCREEN_PROP_READ:
             if (size == sizeof(uint8_t)) {
                 read = *((uint8_t*)data);
+                return 0;
+            }
+            break;
+        case SPI_SCREEN_PROP_OFFSETS:
+            if (size == sizeof(screen_offsets)) {
+                memcpy(&screen_offsets, data, size);
                 return 0;
             }
             break;

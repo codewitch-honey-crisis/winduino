@@ -15,6 +15,7 @@
 #define SPI_SCREEN_PROP_ROWSET 3
 #define SPI_SCREEN_PROP_WRITE 4
 #define SPI_SCREEN_PROP_READ 5
+#define SPI_SCREEN_PROP_OFFSETS 6
 
 #define LIB_SPI_SCREEN ".\\winduino_spi_screen.dll"
 #endif // SCREEN_H
