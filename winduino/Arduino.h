@@ -50,6 +50,10 @@
 #define interrupts() 
 #define noInterrupts() 
 
+#define digitalPinToGPIONumber(digitalPin) (digitalPin)
+#define gpioNumberToDigitalPin(gpioNumber) (gpioNumber)
+#define digitalPinToBitMask(pin)    (1UL << digitalPinToGPIONumber(pin))
+
 #ifndef _NOP
 #define _NOP()
 #endif
@@ -153,6 +157,7 @@ uint16_t analogRead(uint8_t pin);
 inline void analogWriteResolution(uint8_t bits) {}
 const char * pathToFileName(const char * path);
 void append_log_window(const char* text);
+void yield();
 /// @brief The start routine - similar to main()
 void setup();
 /// @brief The loop() routine, as in Arduino
@@ -175,10 +180,13 @@ bool hardware_transfer_bits_spi(uint8_t* data, size_t size_bits);
 bool hardware_attach_log(void* hw);
 #include <algorithm>
 #include <cmath>
-
+#include <math.h>
 #include "WCharacter.h"
 #include "WString.h"
+#include "WMath.h"
 #include "Stream.h"
 #include "Printable.h"
 #include "Print.h"
 #include "HardwareSerial.h"
+inline int min(int x,int y) { return x<y?x:y; }
+inline int max(int x,int y) { return x>y?x:y; }

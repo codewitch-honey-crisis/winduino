@@ -1,1 +1,1 @@
-.\build\winduino.exe
+.\build\example.exe

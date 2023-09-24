@@ -35,14 +35,14 @@ typedef unsigned long prog_uint32_t;
 #define PSTR(s)       (s)
 #define _SFR_BYTE(n)  (n)
 
-#define pgm_read_byte(addr)   (*(const unsigned char *)(addr))
+#define pgm_read_byte(addr)   (*(const uint8_t *)(addr))
 #define pgm_read_word(addr) ({ \
   typeof(addr) _addr = (addr); \
-  *(const unsigned short *)(_addr); \
+  *(const uint16_t *)(_addr); \
 })
 #define pgm_read_dword(addr) ({ \
   typeof(addr) _addr = (addr); \
-  *(const unsigned long *)(_addr); \
+  *(const uint32_t *)(_addr); \
 })
 #define pgm_read_float(addr) ({ \
   typeof(addr) _addr = (addr); \

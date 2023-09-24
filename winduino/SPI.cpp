@@ -30,7 +30,7 @@
 
 #include "SPI.h"
 
-#include <Arduino.h>
+#include "Arduino.h"
 
 SPIClass SPI;
 

@@ -785,6 +785,9 @@ uint16_t analogRead(uint8_t pin) {
     }
     return 0;
 }
+void yield() {
+    
+}
 void attachInterrupt(uint8_t pin, void (*cb)(void), int mode) {
     if(!gpios[pin].is_input()) {
         pinMode(pin,INPUT);
