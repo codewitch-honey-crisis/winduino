@@ -15,9 +15,9 @@ extern "C"
 
 DLL_API int CALL Configure(int prop, void* data, size_t size);
 DLL_API int CALL Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter, void* state);
-//DLL_API int CALL Update();
+DLL_API int CALL Update();
 DLL_API int CALL PinChange(uint8_t pin, uint32_t value);
-DLL_API int CALL TranferBitsSPI(uint8_t* data, size_t size_bits);
+DLL_API int CALL TransferBitsSPI(uint8_t* data, size_t size_bits);
 DLL_API int CALL AttachLog(log_callback logger);
 #ifdef __cplusplus
 } // __cplusplus defined.

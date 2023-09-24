@@ -573,7 +573,7 @@ void setup() {
 #define TFT_RAMWR 0x2C
 #define TFT_RAMRD 0x2E
 
-/*
+
     void* hw_screen = hardware_load(LIB_SPI_SCREEN);
     if(hw_screen==nullptr) {
         Serial.println("Unable to load external SPI screen");
@@ -587,13 +587,18 @@ void setup() {
     if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
         Serial.println("Unable to configure hardware");
     }
-    hardware_set_pin(hw_screen,15, SPI_SCREEN_PIN_BKL);
-    
+    hardware_set_pin(hw_screen,15, SPI_SCREEN_PIN_BKL);    
     hardware_set_pin(hw_screen,5, SPI_SCREEN_PIN_CS);
     hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
     hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
     pinMode(2,OUTPUT);
     pinMode(4,OUTPUT);
+    pinMode(15,OUTPUT);
+    digitalWrite(15,LOW);
+    digitalWrite(4,HIGH);
+    delay(100);
+    digitalWrite(4,LOW);
+    delay(100);
     SPI.begin(18,19,23,5);
     SPISettings settings(40*1000*1000,MSBFIRST,SPI_MODE0);
     SPI.beginTransaction(settings);
@@ -614,10 +619,10 @@ void setup() {
     while(to_write--) {
         SPI.transfer16(0xFFFF);
     }
-    SPI.endTransaction();*/
-#endif
-    pinMode(15,OUTPUT);
+    SPI.endTransaction();
     digitalWrite(15,HIGH);
+    
+#endif
     pinMode(17,OUTPUT);
     digitalWrite(17,HIGH);
     attachInterrupt(18,[]() {

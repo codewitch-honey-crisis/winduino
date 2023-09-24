@@ -231,8 +231,6 @@ const char * pathToFileName(const char * path)
 // this handles our main application loop
 // plus rendering
 static DWORD render_thread_proc(void* state) {
-    // run setup() to initialize user code
-    setup();
     
     bool quit = false;
     while (!quit) {
@@ -649,6 +647,8 @@ int main(int argc, char* argv[]) {
     UpdateWindow(hwnd_main);
     // for the frame counter
     SetTimer(hwnd_main, 0, 1000, NULL);
+    // run setup() to initialize user code
+    setup();
     
     // this is the thread where the actual rendering 
     // takes place and where loop() is run

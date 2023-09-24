@@ -10,9 +10,10 @@
 
 #include <Windows.h>
 #include <d2d1.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+
 #include "spi_screen_lib.h"
 
 #pragma comment(lib, "d2d1.lib")
@@ -87,8 +88,12 @@ static bool can_configure = true;
 static HANDLE render_mutex = NULL;
 static HANDLE render_thread = NULL;
 static HANDLE quit_event = NULL;
+static int reset_state = false;
+static HANDLE screen_ready = NULL;
 static log_callback logger = NULL;
 static HMODULE hInstance = NULL;
+static bool in_pixel_transfer = false;
+
 // directX stuff
 static ID2D1HwndRenderTarget* render_target = nullptr;
 static ID2D1Factory* d2d_factory = nullptr;
@@ -96,41 +101,198 @@ static ID2D1Bitmap* render_bitmap = nullptr;
 
 HWND hwnd_screen = nullptr;
 static bool created_wndcls = false;
-static void logfmt(const char *format, ...)
-{
-    if(logger==nullptr) {
+static void logfmt(const char* format, ...) {
+    if (logger == nullptr) {
         return;
     }
     char loc_buf[1024];
-    char * temp = loc_buf;
+    char* temp = loc_buf;
     va_list arg;
     va_list copy;
     va_start(arg, format);
     va_copy(copy, arg);
     int len = vsnprintf(temp, sizeof(loc_buf), format, copy);
     va_end(copy);
-    if(len < 0) {
+    if (len < 0) {
         va_end(arg);
         return;
     }
-    if(len >= (int)sizeof(loc_buf)){  // comparation of same sign type for the compiler
-        temp = (char*) malloc(len+1);
-        if(temp == NULL) {
+    if (len >= (int)sizeof(loc_buf)) {  // comparation of same sign type for the compiler
+        temp = (char*)malloc(len + 1);
+        if (temp == NULL) {
             va_end(arg);
             return;
         }
-        len = vsnprintf(temp, len+1, format, arg);
+        len = vsnprintf(temp, len + 1, format, arg);
     }
     va_end(arg);
     logger(temp);
-    if(temp != loc_buf){
+    if (temp != loc_buf) {
         free(temp);
     }
     return;
 }
+static LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_CLOSE) {
+        SetEvent(quit_event);
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+static DWORD render_thread_proc(void* state);
+static DWORD window_thread_proc(void* state) {
+    HRESULT hr;
+    ResetEvent(screen_ready);
+
+    if (frame_buffer == nullptr) {
+        frame_buffer = (uint8_t*)malloc(4 * screen_size.width * screen_size.height);
+        if (frame_buffer == nullptr) {
+            return 1;
+        }
+    }
+    if (render_mutex == nullptr) {
+        if (!created_wndcls) {
+            WNDCLASSW wc;
+            wc.style = CS_HREDRAW | CS_VREDRAW;
+            wc.lpfnWndProc = WindowProc;
+            wc.cbClsExtra = 0;
+            wc.cbWndExtra = 0;
+            wc.hInstance = hInstance;  // GetModuleHandle(NULL);
+            wc.hbrBackground = NULL;
+            wc.lpszMenuName = NULL;
+            wc.hIcon = NULL;
+            wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+            wc.lpszClassName = L"spi_screen";
+            RegisterClassW(&wc);
+            created_wndcls = true;
+        }
+        if (quit_event == NULL) {
+            // for signalling when to exit
+            quit_event = CreateEventW(
+                NULL,         // default security attributes
+                TRUE,         // manual-reset event
+                FALSE,        // initial state is nonsignaled
+                L"QuitEvent"  // object name
+            );
+            if (quit_event == NULL) {
+                return 1;
+            }
+        }
+        if (d2d_factory == nullptr) {
+            // start DirectX
+            hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2d_factory);
+            if (!SUCCEEDED(hr)) {
+                return 1;
+            }
+        }
+        RECT r = {0, 0, screen_size.width, screen_size.height};
+        AdjustWindowRectEx(&r, WS_CAPTION | WS_BORDER, FALSE, WS_EX_TOOLWINDOW);
+        hwnd_screen = CreateWindowExW(WS_EX_TOOLWINDOW, L"spi_screen", L"SPI Screen", WS_CAPTION | WS_BORDER, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, NULL, NULL, /* GetModuleHandleW(NULL)*/ hInstance, NULL);
+        if (hwnd_screen == nullptr) {
+            return 1;
+        }
+        if (render_target == nullptr) {
+            RECT rc;
+            GetClientRect(hwnd_screen, &rc);
+            D2D1_SIZE_U size = D2D1::SizeU(
+                (rc.right - rc.left),
+                rc.bottom - rc.top);
+
+            hr = d2d_factory->CreateHwndRenderTarget(
+                D2D1::RenderTargetProperties(),
+                D2D1::HwndRenderTargetProperties(hwnd_screen, size),
+                &render_target);
+
+            if (!SUCCEEDED(hr)) {
+                return 1;
+            }
+        }
+        if (render_bitmap == nullptr) {
+            // initialize the render bitmap
+            D2D1_SIZE_U size = {0};
+            D2D1_BITMAP_PROPERTIES props;
+            render_target->GetDpi(&props.dpiX, &props.dpiY);
+            D2D1_PIXEL_FORMAT pixelFormat = D2D1::PixelFormat(
+                DXGI_FORMAT_B8G8R8A8_UNORM,
+                D2D1_ALPHA_MODE_IGNORE);
+            props.pixelFormat = pixelFormat;
+            size.width = screen_size.width;
+            size.height = screen_size.height;
+
+            hr = render_target->CreateBitmap(size,
+                                             props,
+                                             &render_bitmap);
+            if (!SUCCEEDED(hr)) {
+                return 1;
+            }
+        }
+        if (render_mutex == NULL) {
+            render_mutex = CreateMutexW(NULL, FALSE, NULL);
+            if (render_mutex == NULL) {
+                return 1;
+            }
+        }
+        if (render_thread == NULL) {
+            render_thread = CreateThread(NULL, 4000, render_thread_proc, NULL, 0, NULL);
+            if (render_thread == NULL) {
+                return 1;
+            }
+        }
+        ShowWindow(hwnd_screen, SW_SHOW);
+        UpdateWindow(hwnd_screen);
+    }
+    SetEvent(screen_ready);
+    bool quit = false;
+    while (!quit) {
+        DWORD result = 0;
+        MSG msg = {0};
+        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                quit = true;
+                break;
+            }
+            // handle out of band
+            // window messages here
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+        if (WAIT_OBJECT_0 == WaitForSingleObject(quit_event, 0)) {
+            quit = true;
+        }
+    }
+    ResetEvent(screen_ready);
+    if (quit_event != NULL) {
+        SetEvent(quit_event);
+    }
+    if (render_thread != NULL) {
+        CloseHandle(render_thread);
+    }
+    if (render_bitmap != nullptr) {
+        render_bitmap->Release();
+        render_bitmap = nullptr;
+    }
+    if (render_target != nullptr) {
+        render_target->Release();
+        render_target = nullptr;
+    }
+    if (hwnd_screen != NULL) {
+        DestroyWindow(hwnd_screen);
+        hwnd_screen = NULL;
+    }
+    if (render_mutex != NULL) {
+        CloseHandle(render_mutex);
+    }
+    if (quit_event != NULL) {
+        CloseHandle(quit_event);
+    }
+    return 0;
+}
 static uint8_t process_byte(uint8_t val) {
-    if (can_configure) return 0;
+    if (can_configure) return val;
     if (dc.value()) {
+        if (st == STATE_INITIAL) {
+            return 0;
+        }
         switch (st) {
             case STATE_WRITE:
                 switch (offset) {
@@ -140,30 +302,34 @@ static uint8_t process_byte(uint8_t val) {
                         ++bytes_written;
                         break;
                     case 1:
-                        write_col |= val;
-                        uint8_t r = ((float)((write_col >> 11) & 31) / 31.0f) * 255;
-                        uint8_t g = ((float)((write_col >> 5) & 63) / 63.0f) * 255;
-                        uint8_t b = ((float)((write_col >> 0) & 31) / 31.0f) * 255;
-                        if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                                 render_mutex,  // handle to mutex
-                                                 INFINITE)) {   // no time-out interval)
-                            uint8_t* p = &frame_buffer[column + screen_size.width * row * 4];
+                        if (in_pixel_transfer) {
+                            write_col |= val;
+                            uint8_t r = ((float)((write_col >> 11) & 31) / 31.0f) * 255;
+                            uint8_t g = ((float)((write_col >> 5) & 63) / 63.0f) * 255;
+                            uint8_t b = ((float)((write_col >> 0) & 31) / 31.0f) * 255;
+
+                            uint8_t* p = frame_buffer + ((column + screen_size.width * row) * 4);
                             *p++ = b;
                             *p++ = g;
                             *p++ = r;
                             *p = 0xFF;
-                            ReleaseMutex(render_mutex);
-                        }
-                        ++column;
-                        if (column > col_end) {
-                            ++row;
-                            if (row > row_end) {
-                                st = STATE_IGNORING;
-                                break;
+
+                            ++column;
+                            if (column > col_end) {
+                                ++row;
+                                column = col_start;
+                                if (row > row_end) {
+                                    if (in_pixel_transfer) {
+                                        ReleaseMutex(render_mutex);
+                                    }
+                                    in_pixel_transfer = false;
+                                    st = STATE_IGNORING;
+                                    break;
+                                }
                             }
+                            ++bytes_written;
+                            offset = 0;
                         }
-                        ++bytes_written;
-                        offset = 0;
                         break;
                 }
 
@@ -216,6 +382,10 @@ static uint8_t process_byte(uint8_t val) {
                         }
                     case STATE_WRITE:
                         if (bytes_written == sizeof(uint16_t) * (row_end - row_start + 1) * (col_start - col_end + 1)) {
+                            if (in_pixel_transfer) {
+                                ReleaseMutex(render_mutex);
+                            }
+                            in_pixel_transfer = false;
                             st = STATE_IGNORING;
                         }
                         break;
@@ -223,29 +393,70 @@ static uint8_t process_byte(uint8_t val) {
                 break;
         }
     } else {
+        DWORD wr;
         bytes_written = 0;
         bytes_read = 0;
         cmd = val;
+        logfmt("cmd: %d", cmd);
         if (cmd == colset) {
+            if (in_pixel_transfer) {
+                ReleaseMutex(render_mutex);
+            }
+            in_pixel_transfer = false;
             st = STATE_COLSET;
         } else if (cmd == rowset) {
+            if (in_pixel_transfer) {
+                ReleaseMutex(render_mutex);
+            }
+            in_pixel_transfer = false;
             st = STATE_ROWSET;
         } else if (cmd == write) {
-            st = STATE_WRITE;
+            if (in_pixel_transfer) {
+                ReleaseMutex(render_mutex);
+            }
+            in_pixel_transfer = false;
+            wr = WaitForSingleObject(screen_ready, INFINITE);
+            if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
+                wr = WaitForSingleObject(
+                    render_mutex,  // handle to mutex
+                    INFINITE);
+                if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
+                    in_pixel_transfer = true;
+                    st = STATE_WRITE;
+                } else {
+                    logfmt("Error writing pixels (unable to wait render): %x", GetLastError());
+                    in_pixel_transfer = false;
+                }
+            } else {
+                logfmt("Error writing pixels (unable to wait screen ready): %x", GetLastError());
+            }
         } else if (cmd == read) {
-            st = STATE_READ;
+            if (in_pixel_transfer) {
+                ReleaseMutex(render_mutex);
+            }
+            in_pixel_transfer = false;
+            wr = WaitForSingleObject(screen_ready, INFINITE);
+            if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
+                wr = WaitForSingleObject(
+                    render_mutex,  // handle to mutex
+                    INFINITE);
+                if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
+                    in_pixel_transfer = true;
+                    st = STATE_READ;
+                } else {
+                    in_pixel_transfer = false;
+                }
+            }
         } else {
+            if (in_pixel_transfer) {
+                ReleaseMutex(render_mutex);
+            }
+            in_pixel_transfer = false;
             st = STATE_IGNORING;
             cmd_args_size = 0;
         }
     }
     return val;
-}
-static LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_CLOSE) {
-        SetEvent(quit_event);
-    }
-    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 static DWORD render_thread_proc(void* state) {
     bool quit = false;
@@ -254,7 +465,7 @@ static DWORD render_thread_proc(void* state) {
             if (WAIT_OBJECT_0 == WaitForSingleObject(
                                      render_mutex,  // handle to mutex
                                      INFINITE)) {   // no time-out interval)
-                render_bitmap->CopyFromMemory(NULL,frame_buffer,4*screen_size.width);
+                render_bitmap->CopyFromMemory(NULL, frame_buffer, 4 * screen_size.width);
                 render_target->BeginDraw();
                 D2D1_RECT_F rect_dest = {
                     0,
@@ -273,131 +484,36 @@ static DWORD render_thread_proc(void* state) {
     }
     return 0;
 }
-static void on_bkl_changed(void* state) {
-    HRESULT hr;
-    if (bkl.value() != bkl_low) {  // on
-        if (frame_buffer == nullptr) {
-            frame_buffer = (uint8_t*)malloc(4 * screen_size.width * screen_size.height);
-            if (frame_buffer == nullptr) {
-                return;
+static void on_rst_changed(void* state) {
+    if (reset_state == 0) {
+        if (rst.value()) {
+            reset_state = 1;
+            return;
+        }
+    } else {
+        if (!rst.value()) {
+            reset_state = 2;
+        }
+    }
+    if (reset_state == 2) {
+        HRESULT hr;
+        if (screen_ready == NULL) {
+            screen_ready = CreateEventW(
+                NULL,           // default security attributes
+                TRUE,           // manual-reset event
+                FALSE,          // initial state is nonsignaled
+                L"ScreenReady"  // object name
+            );
+            if (screen_ready == NULL) {
+                logfmt("unable to create screen_ready handle");
             }
         }
-        if (render_mutex == nullptr) {
-            if (!created_wndcls) {
-                WNDCLASSW wc;
-                wc.style = CS_HREDRAW | CS_VREDRAW;
-                wc.lpfnWndProc = WindowProc;
-                wc.cbClsExtra = 0;
-                wc.cbWndExtra = 0;
-                wc.hInstance = GetModuleHandle(NULL);
-                wc.hbrBackground = NULL;
-                wc.lpszMenuName = NULL;
-                wc.hIcon = NULL;
-                wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-                wc.lpszClassName = L"spi_screen";
-                RegisterClassW(&wc);
-                created_wndcls = true;
-                
-            }
-            if (quit_event == NULL) {
-                // for signalling when to exit
-                quit_event = CreateEventW(
-                    NULL,         // default security attributes
-                    TRUE,         // manual-reset event
-                    FALSE,        // initial state is nonsignaled
-                    L"QuitEvent"  // object name
-                );
-                if (quit_event == NULL) {
-                    return;
-                }
-            }
-            if (d2d_factory == nullptr) {
-                // start DirectX
-                hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2d_factory);
-                if (!SUCCEEDED(hr)) {
-                    return;
-                }
-            }
-            RECT r = {0, 0, screen_size.width, screen_size.height};
-            AdjustWindowRectEx(&r, WS_CAPTION | WS_BORDER, FALSE, WS_EX_TOOLWINDOW);
-            hwnd_screen = CreateWindowExW(WS_EX_TOOLWINDOW, L"spi_screen", L"SPI Screen", WS_CAPTION | WS_BORDER, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, NULL, NULL, GetModuleHandleW(NULL), NULL);
-            if (hwnd_screen == nullptr) {
-                return;
-            }
-            if (render_target == nullptr) {
-                RECT rc;
-                GetClientRect(hwnd_screen, &rc);
-                D2D1_SIZE_U size = D2D1::SizeU(
-                    (rc.right - rc.left),
-                    rc.bottom - rc.top);
-
-                hr = d2d_factory->CreateHwndRenderTarget(
-                    D2D1::RenderTargetProperties(),
-                    D2D1::HwndRenderTargetProperties(hwnd_screen, size),
-                    &render_target);
-
-                if (!SUCCEEDED(hr)) {
-                    return;
-                }
-            }
-            if (render_bitmap == nullptr) {
-                // initialize the render bitmap
-                D2D1_SIZE_U size = {0};
-                D2D1_BITMAP_PROPERTIES props;
-                render_target->GetDpi(&props.dpiX, &props.dpiY);
-                D2D1_PIXEL_FORMAT pixelFormat = D2D1::PixelFormat(
-                    DXGI_FORMAT_B8G8R8A8_UNORM,
-                    D2D1_ALPHA_MODE_IGNORE);
-                props.pixelFormat = pixelFormat;
-                size.width = screen_size.width;
-                size.height = screen_size.height;
-
-                hr = render_target->CreateBitmap(size,
-                                                 props,
-                                                 &render_bitmap);
-                if (!SUCCEEDED(hr)) {
-                    return;
-                }
-            }
-            if (render_mutex == NULL) {
-                render_mutex = CreateMutexW(NULL, FALSE, NULL);
-                if (render_mutex == NULL) {
-                    return;
-                }
-            }
-            if(render_thread==NULL) {
-                render_thread = CreateThread(NULL,4000,render_thread_proc,NULL,0,NULL);
-                if(render_thread==NULL) {
-                    return;
-                }
-            }
-            ShowWindow(hwnd_screen, SW_SHOWNORMAL);
-            UpdateWindow(hwnd_screen);
+        if (quit_event == NULL) {
+            CreateThread(NULL, 4000, window_thread_proc, NULL, 0, NULL);
         }
     } else {  // off
         if (quit_event != NULL) {
             SetEvent(quit_event);
-        }
-        if (render_thread != NULL) {
-            CloseHandle(render_thread);
-        }
-        if (render_bitmap != nullptr) {
-            render_bitmap->Release();
-            render_bitmap = nullptr;
-        }
-        if (render_target != nullptr) {
-            render_target->Release();
-            render_target = nullptr;
-        }
-        if (hwnd_screen != NULL) {
-            DestroyWindow(hwnd_screen);
-            hwnd_screen = NULL;
-        }
-        if (render_mutex != NULL) {
-            CloseHandle(render_mutex);
-        }
-        if (quit_event != NULL) {
-            CloseHandle(quit_event);
         }
     }
 }
@@ -470,6 +586,7 @@ int CALL Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter
             }
             rst.read = getter;
             rst.read_state = state;
+            rst.on_change_callback = on_rst_changed;
             break;
         case SPI_SCREEN_PIN_BKL:
             if (getter == nullptr) {
@@ -477,7 +594,6 @@ int CALL Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter
             }
             bkl.read = getter;
             bkl.read_state = state;
-            bkl.on_change_callback = on_bkl_changed;
             break;
         default:
             return 1;
@@ -509,14 +625,14 @@ int CALL PinChange(uint8_t pin, uint32_t value) {
 }
 int CALL AttachLog(log_callback logger) {
     ::logger = logger;
-    return logger==NULL;
+    return logger == NULL;
 }
 int CALL TransferBitsSPI(uint8_t* data, size_t size_bits) {
-    if(cs.value()) {
+    if (cs.value()) {
         return 0;
     }
-    size_t full_bytes=size_bits/8;
-    while(full_bytes--) {
+    size_t full_bytes = size_bits / 8;
+    while (full_bytes--) {
         *data = process_byte(*data);
         data++;
     }
@@ -524,14 +640,15 @@ int CALL TransferBitsSPI(uint8_t* data, size_t size_bits) {
 }
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-
-    switch (fdwReason)
-    {
+    switch (fdwReason) {
         case DLL_PROCESS_ATTACH:
             hInstance = hinstDLL;
             break;
 
         case DLL_PROCESS_DETACH:
+            if (quit_event != NULL) {
+                SetEvent(quit_event);
+            }
             break;
 
         case DLL_THREAD_ATTACH:
@@ -542,4 +659,4 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     }
 
     return TRUE;
-} 
+}
