@@ -67,7 +67,8 @@ typedef enum states {
     STATE_ROWSET1,
     STATE_ROWSET2,
     STATE_WRITE,
-    STATE_READ
+    STATE_READ1,
+    STATE_READ2
 } states_t;
 static states_t st = STATE_INITIAL;
 bool bkl_low = false;
@@ -84,7 +85,7 @@ static input_t dc;
 static input_t rst;
 static input_t bkl;
 static uint8_t* frame_buffer;
-static uint16_t data_word = 0;
+static uint32_t data_word = 0;
 static size_t bytes_written = 0, bytes_read = 0;
 static uint16_t column = 0, row = 0;
 static int offset = 0;
@@ -191,7 +192,7 @@ static DWORD window_thread_proc(void* state) {
         }
         RECT r = {0, 0, screen_size.width, screen_size.height};
         AdjustWindowRectEx(&r, WS_CAPTION | WS_BORDER, FALSE, WS_EX_TOOLWINDOW);
-        hwnd_screen = CreateWindowExW(WS_EX_TOOLWINDOW, L"spi_screen", L"SPI Screen", WS_CAPTION | WS_BORDER, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, NULL, NULL, /* GetModuleHandleW(NULL)*/ hInstance, NULL);
+        hwnd_screen = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_APPWINDOW, L"spi_screen", L"SPI Screen", WS_CAPTION | WS_BORDER, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, NULL, NULL, /* GetModuleHandleW(NULL)*/ hInstance, NULL);
         if (hwnd_screen == nullptr) {
             return 1;
         }
@@ -297,59 +298,101 @@ static uint8_t process_byte(uint8_t val) {
         if (st == STATE_INITIAL) {
             return 0;
         }
+        int x, y;
+        uint8_t* p;
         switch (st) {
             case STATE_WRITE:
                 switch (offset) {
                     case 0:
                         data_word = val << 8;
-                        offset=1;
+                        offset = 1;
                         ++bytes_written;
                         break;
                     case 1:
-                        if (in_pixel_transfer) {
-                            data_word |= val;
-                            int x = column- screen_offsets.x;
-                            int y = row - screen_offsets.y;
-                            if (x >= 0 && x < screen_size.width && y >= 0 && y < screen_size.height) {
-                                uint8_t r = ((float)((data_word >> 11) & 31) / 31.0f) * 255;
-                                uint8_t g = ((float)((data_word >> 5) & 63) / 63.0f) * 255;
-                                uint8_t b = ((float)((data_word >> 0) & 31) / 31.0f) * 255;
 
-                                uint8_t* p = frame_buffer + ((x + screen_size.width * y) * 4);
-                                *p++ = b;
-                                *p++ = g;
-                                *p++ = r;
-                                *p = 0xFF;
-                                InterlockedExchange(&render_changed,1);
-                            }
-                            ++column;
-                            if (column > col_end) {
-                                ++row;
-                                column = col_start;
-                                if (row > row_end) {
-                                    if (in_pixel_transfer) {
-                                        ReleaseMutex(render_mutex);
-                                    }
-                                    in_pixel_transfer = false;
-                                    st = STATE_IGNORING;
-                                    break;
-                                }
-                            }
-                            ++bytes_written;
-                            offset = 0;
-                            if (bytes_written == sizeof(uint16_t) * (row_end - row_start + 1) * (col_start - col_end + 1)) {
+                        data_word |= val;
+                        x = column - screen_offsets.x;
+                        y = row - screen_offsets.y;
+                        if (in_pixel_transfer && x >= 0 && x < screen_size.width && y >= 0 && y < screen_size.height) {
+                            uint8_t r = ((float)((data_word >> 11) & 31) / 31.0f) * 255;
+                            uint8_t g = ((float)((data_word >> 5) & 63) / 63.0f) * 255;
+                            uint8_t b = ((float)((data_word >> 0) & 31) / 31.0f) * 255;
+
+                            uint8_t* p = frame_buffer + ((x + screen_size.width * y) * 4);
+                            *p++ = b;
+                            *p++ = g;
+                            *p++ = r;
+                            *p = 0xFF;
+                            InterlockedExchange(&render_changed, 1);
+                        }
+                        ++column;
+                        if (column > col_end) {
+                            ++row;
+                            column = col_start;
+                            if (row > row_end) {
                                 if (in_pixel_transfer) {
                                     ReleaseMutex(render_mutex);
                                 }
                                 in_pixel_transfer = false;
                                 st = STATE_IGNORING;
+                                break;
                             }
                         }
+                        ++bytes_written;
+                        offset = 0;
+                        if (bytes_written == sizeof(uint16_t) * (row_end - row_start + 1) * (col_start - col_end + 1)) {
+                            if (in_pixel_transfer) {
+                                ReleaseMutex(render_mutex);
+                            }
+                            in_pixel_transfer = false;
+                            st = STATE_IGNORING;
+                        }
+
                         break;
                 }
 
                 break;
+            case STATE_READ1:
+                // toss this byte. quirk of the hardware
+                st = STATE_READ2;
+                bytes_read = 0;
+                break;
+            case STATE_READ2:
+                ++bytes_read;
+                val = 0;
+                x = column - screen_offsets.x;
+                y = row - screen_offsets.y;
 
+                if (in_pixel_transfer && x >= 0 && x < screen_size.width && y >= 0 && y < screen_size.height) {
+                    switch (offset) {
+                        case 0:
+                            p = frame_buffer + ((x + screen_size.width * y) * 4) + 2;
+                            val = (*p) & 0xFC;
+                            offset = 1;
+
+                            break;
+                        case 1:
+                            p = frame_buffer + ((x + screen_size.width * y) * 4) + 1;
+                            val = (*p) & 0xFC;
+                            offset = 2;
+                            break;
+                        case 2:
+                            p = frame_buffer + ((x + screen_size.width * y) * 4) + 0;
+                            val = (*p) & 0xFC;
+                            offset = 0;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                if (bytes_read == sizeof(uint16_t) * (row_end - row_start + 1) * (col_start - col_end + 1)) {
+                    if (in_pixel_transfer) {
+                        ReleaseMutex(render_mutex);
+                    }
+                    in_pixel_transfer = false;
+                    st = STATE_IGNORING;
+                }
+                break;
             case STATE_COLSET1:
                 if (offset == 0) {
                     data_word = val << 8;
@@ -370,7 +413,7 @@ static uint8_t process_byte(uint8_t val) {
                     offset = 0;
                     col_end = data_word;
                     st = STATE_IGNORING;
-                    //logfmt("col_start: %d, col_end: %d",col_start,col_end);
+                    // logfmt("col_start: %d, col_end: %d",col_start,col_end);
                 }
                 break;
             case STATE_ROWSET1:
@@ -393,7 +436,7 @@ static uint8_t process_byte(uint8_t val) {
                     offset = 0;
                     row_end = data_word;
                     st = STATE_IGNORING;
-                    //logfmt("row_start: %d, row_end: %d",row_start,row_end);
+                    // logfmt("row_start: %d, row_end: %d",row_start,row_end);
                 }
                 break;
         }
@@ -402,15 +445,6 @@ static uint8_t process_byte(uint8_t val) {
         bytes_written = 0;
         bytes_read = 0;
         cmd = val;
-        if (cmd == colset) {
-            logfmt("cmd: COLSET");
-        } else if (cmd == rowset) {
-            logfmt("cmd: ROWSET");
-        } else if (cmd == write) {
-            logfmt("cmd: RAMWR");
-        } else {
-            logfmt("cmd: %02X", cmd);
-        }
         if (cmd == colset) {
             if (in_pixel_transfer) {
                 ReleaseMutex(render_mutex);
@@ -442,7 +476,6 @@ static uint8_t process_byte(uint8_t val) {
                     render_mutex,  // handle to mutex
                     INFINITE);
                 if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
-                    logfmt("Ready to write");
                     in_pixel_transfer = true;
                     st = STATE_WRITE;
                 } else {
@@ -467,7 +500,7 @@ static uint8_t process_byte(uint8_t val) {
                     INFINITE);
                 if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
                     in_pixel_transfer = true;
-                    st = STATE_READ;
+                    st = STATE_READ1;
                 } else {
                     in_pixel_transfer = false;
                 }
@@ -485,8 +518,7 @@ static uint8_t process_byte(uint8_t val) {
 static DWORD render_thread_proc(void* state) {
     bool quit = false;
     while (!quit) {
-        
-        if (0!=render_changed && frame_buffer && render_target && render_bitmap) {
+        if (0 != render_changed && frame_buffer && render_target && render_bitmap) {
             if (WAIT_OBJECT_0 == WaitForSingleObject(
                                      render_mutex,  // handle to mutex
                                      INFINITE)) {   // no time-out interval)
@@ -501,7 +533,7 @@ static DWORD render_thread_proc(void* state) {
                                           rect_dest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR, NULL);
                 render_target->EndDraw();
                 ReleaseMutex(render_mutex);
-                InterlockedExchange(&render_changed,0);
+                InterlockedExchange(&render_changed, 0);
             }
         }
         if (WAIT_OBJECT_0 == WaitForSingleObject(quit_event, 0)) {

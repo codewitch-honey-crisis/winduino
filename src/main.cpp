@@ -609,9 +609,10 @@ open_text_info oti;
 oti.font = &text_font;
 oti.scale = oti.font->scale(50);
 oti.text = "Hello world!";
-oti.transparent_background = false;
 auto bmp = create_bitmap_from(lcd2,{screen_size.width,screen_size.height});
+// reading SPI displays is slow so we don't.
 if(bmp.begin()) {
+    bmp.fill(bmp.bounds(),color2_t::orange);
     draw::text(bmp,bmp.bounds(),oti,color2_t::wheat);
     draw::bitmap(lcd2,lcd2.bounds(),bmp,bmp.bounds());
     free(bmp.begin());
