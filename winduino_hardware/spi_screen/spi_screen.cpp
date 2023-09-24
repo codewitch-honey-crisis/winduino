@@ -442,10 +442,10 @@ static uint8_t process_byte(uint8_t val) {
                     render_mutex,  // handle to mutex
                     INFINITE);
                 if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
+                    logfmt("Ready to write");
                     in_pixel_transfer = true;
                     st = STATE_WRITE;
                 } else {
-                    logfmt("Error writing pixels (unable to wait render): %x", GetLastError());
                     in_pixel_transfer = false;
                 }
             } else {

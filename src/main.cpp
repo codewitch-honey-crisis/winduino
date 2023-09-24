@@ -13,7 +13,7 @@ using namespace uix;
 using namespace arduino;
 
 using bus_t = tft_spi<0,5>;
-using lcd_t = st7789<135,240,2,4,15,bus_t,1>;
+using lcd_t = st7789<135,240,2,4,-1,bus_t,1>;
 // creates a BGRx pixel by making each channel 
 // one quarter of the whole. Any remainder bits
 // are added to the green channel. One channel
@@ -603,13 +603,13 @@ void setup() {
     hardware_set_pin(hw_screen,5, SPI_SCREEN_PIN_CS);
     hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
     hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
+lcd2.initialize();
 
 open_text_info oti;
 oti.font = &text_font;
 oti.scale = oti.font->scale(50);
 oti.text = "Hello world!";
 oti.transparent_background = false;
-lcd2.initialize();
 auto bmp = create_bitmap_from(lcd2,{screen_size.width,screen_size.height});
 if(bmp.begin()) {
     draw::text(bmp,bmp.bounds(),oti,color2_t::wheat);

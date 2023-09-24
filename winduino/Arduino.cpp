@@ -400,7 +400,7 @@ uint32_t micros() {
     LARGE_INTEGER end_time;
     QueryPerformanceFrequency(&counter_freq);
     QueryPerformanceCounter(&end_time);
-    return uint32_t(((double)(end_time.QuadPart - start_time.QuadPart) / counter_freq.QuadPart));
+    return uint32_t(((double)(end_time.QuadPart - start_time.QuadPart) / counter_freq.QuadPart)*1000000.0);
 }
 void delay(uint32_t ms) {
     if(is_isr) return;
