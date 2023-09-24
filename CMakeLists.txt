@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
+
 project(winduino VERSION 1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -19,6 +20,7 @@ add_executable(winduino
                 winduino/StdioFSImpl.cpp
                 winduino/FS.cpp
                 winduino/SD.cpp
+                winduino/SPI.cpp
                 
                 lib/htcw_io/src/io_stream.cpp
                 lib/htcw_gfx/src/gfx_drawing.cpp
@@ -34,6 +36,8 @@ add_executable(winduino
                 lib/htcw_gfx/src/miniz.c
                 lib/htcw_gfx/src/pngle.c)
 target_link_libraries(winduino ${LIBS} )
+set(CMAKE_STATIC_LIBRARY_PREFIX "")
+set(CMAKE_SHARED_LIBRARY_PREFIX "")
 target_include_directories(winduino PUBLIC
                           "${PROJECT_SOURCE_DIR}/winduino"
 
@@ -47,3 +51,11 @@ target_include_directories(winduino PUBLIC
                           "${PROJECT_BINARY_DIR}"
                           "${PROJECT_SOURCE_DIR}/include"
                           )
+add_library(winduino_spi_screen SHARED
+    winduino_hardware/spi_screen/spi_screen.cpp)
+target_link_libraries(winduino_spi_screen ${LIBS} )
+target_include_directories(winduino_spi_screen PUBLIC
+    "${PROJECT_SOURCE_DIR}"
+    "${PROJECT_SOURCE_DIR}/include"
+    "${PROJECT_BINARY_DIR}"
+    )

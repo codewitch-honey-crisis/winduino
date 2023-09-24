@@ -119,12 +119,13 @@ static const uint8_t D10 = 11;
 constexpr static const struct {
     int width;
     int height;
-} screen_size = 
+} winduino_screen_size = 
 #ifdef SCREEN_SIZE
 SCREEN_SIZE;
 #else
 {320,240};
 #endif
+typedef __cdecl void(*hardware_log_callback)(const char* text);
 /// @brief Reports the milliseconds since the app started
 /// @return The number of milliseconds elapsed
 uint32_t millis();
@@ -167,7 +168,11 @@ void flush_bitmap(int x1, int y1, int w, int h, const void* bmp );
 /// @param out_location The location
 /// @return True if the button is pressed
 bool read_mouse(int* out_x, int* out_y);
-
+void* hardware_load(const char* name);
+bool hardware_set_pin(void* hw, uint8_t mcu_pin, uint8_t hw_pin);
+bool hardware_configure(void* hw, int prop, void* data, size_t size);
+bool hardware_transfer_bits_spi(uint8_t* data, size_t size_bits);
+bool hardware_attach_log(void* hw);
 #include <algorithm>
 #include <cmath>
 

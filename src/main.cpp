@@ -2,8 +2,10 @@
 #define SCREEN_SIZE {320,240}
 #include <Arduino.h>
 #include <SD.h>
+#include <SPI.h>
 #include <gfx.hpp>
 #include <uix.hpp>
+#include "spi_screen.h"
 using namespace gfx;
 using namespace uix;
 
@@ -105,14 +107,14 @@ using color32_t = color<rgba_pixel<32>>;
 // UIX allows you to use two buffers for maximum DMA efficiency
 // you don't have to, but performance is significantly better
 // declare 64KB across two buffers for transfer
-constexpr static const int lcd_screen_size = bitmap<typename screen_t::pixel_type>::sizeof_buffer(size16(screen_size.width, screen_size.height));
+constexpr static const int lcd_screen_size = bitmap<typename screen_t::pixel_type>::sizeof_buffer(size16(winduino_screen_size.width, winduino_screen_size.height));
 constexpr static const int lcd_buffer_size = lcd_screen_size > 64 * 1024 ? 64 * 1024 : lcd_screen_size;
 static uint8_t lcd_buffer1[lcd_buffer_size];
 
 
 
 // the main screen
-screen_t anim_screen({screen_size.width,screen_size.height}, sizeof(lcd_buffer1), lcd_buffer1, nullptr);
+screen_t anim_screen({winduino_screen_size.width,winduino_screen_size.height}, sizeof(lcd_buffer1), lcd_buffer1, nullptr);
 
 void uix_on_touch(point16* out_locations,
                   size_t* in_out_locations_size,
@@ -125,14 +127,14 @@ void uix_on_touch(point16* out_locations,
         if(x<0) {
             x=0;
         }
-        if(x>=screen_size.width) {
-            x=screen_size.width-1;
+        if(x>=winduino_screen_size.width) {
+            x=winduino_screen_size.width-1;
         }
         if(y<0) {
             y=0;
         }
-        if(y>=screen_size.height) {
-            y=screen_size.height-1;
+        if(y>=winduino_screen_size.height) {
+            y=winduino_screen_size.height-1;
         }
         *in_out_locations_size =1;
         *out_locations = point16((unsigned)x,(unsigned)y);
@@ -158,10 +160,10 @@ static label_t summaries[] = {
 template <typename ControlSurfaceType>
 class fire_box : public control<ControlSurfaceType> {
     int draw_state = 0;
-	constexpr static const int V_WIDTH =screen_size.width / 4;
-	constexpr static const int V_HEIGHT =screen_size.height / 4;
-	constexpr static const int BUF_WIDTH =screen_size.width / 4;
-	constexpr static const int BUF_HEIGHT =screen_size.height / 4+6;
+	constexpr static const int V_WIDTH =winduino_screen_size.width / 4;
+	constexpr static const int V_HEIGHT =winduino_screen_size.height / 4;
+	constexpr static const int BUF_WIDTH =winduino_screen_size.width / 4;
+	constexpr static const int BUF_HEIGHT =winduino_screen_size.height / 4+6;
 
     uint8_t p1[BUF_HEIGHT][BUF_WIDTH];  // VGA buffer, quarter resolution w/extra lines
     unsigned int i, j, k, l, delta;     // looping variables, counters, and data
@@ -565,6 +567,57 @@ static void screen_init() {
 }
 void setup() {
     Serial.begin(115200);
+#ifdef WINDUINO
+#define TFT_CASET 0x2A
+#define TFT_PASET 0x2B
+#define TFT_RAMWR 0x2C
+#define TFT_RAMRD 0x2E
+
+/*
+    void* hw_screen = hardware_load(LIB_SPI_SCREEN);
+    if(hw_screen==nullptr) {
+        Serial.println("Unable to load external SPI screen");
+    }
+    struct {
+        uint16_t width;
+        uint16_t height;
+    } screen_size = {240,135};
+    
+    hardware_attach_log(hw_screen);
+    if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
+        Serial.println("Unable to configure hardware");
+    }
+    hardware_set_pin(hw_screen,15, SPI_SCREEN_PIN_BKL);
+    
+    hardware_set_pin(hw_screen,5, SPI_SCREEN_PIN_CS);
+    hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
+    hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
+    pinMode(2,OUTPUT);
+    pinMode(4,OUTPUT);
+    SPI.begin(18,19,23,5);
+    SPISettings settings(40*1000*1000,MSBFIRST,SPI_MODE0);
+    SPI.beginTransaction(settings);
+    digitalWrite(2,LOW);
+    SPI.transfer(TFT_CASET);
+    digitalWrite(2,HIGH);
+    SPI.transfer16(0);
+    SPI.transfer16(239);
+    digitalWrite(2,LOW);
+    SPI.transfer(TFT_PASET);
+    digitalWrite(2,HIGH);
+    SPI.transfer16(0);
+    SPI.transfer16(134);
+    digitalWrite(2,LOW);
+    SPI.transfer(TFT_RAMWR);
+    digitalWrite(2,HIGH);
+    size_t to_write = screen_size.width*screen_size.height;
+    while(to_write--) {
+        SPI.transfer16(0xFFFF);
+    }
+    SPI.endTransaction();*/
+#endif
+    pinMode(15,OUTPUT);
+    digitalWrite(15,HIGH);
     pinMode(17,OUTPUT);
     digitalWrite(17,HIGH);
     attachInterrupt(18,[]() {
