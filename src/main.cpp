@@ -15,7 +15,7 @@ using namespace arduino;
 
 using bus_t = tft_spi<0,5>;
 using lcd_t = st7789<135,240,2,4,-1,bus_t,1>;
-using touch_t = ft6236<135,240>;
+using touch_t = ft6236<240,135>;
 // creates a BGRx pixel by making each channel 
 // one quarter of the whole. Any remainder bits
 // are added to the green channel. One channel
@@ -780,7 +780,7 @@ void loop() {
         if(touch2.touches()) {
             uint16_t x,y;
             touch2.xy(&x,&y);
-            Serial.printf("Touch: (%d,%d)\r\n",x,y);
+            draw::filled_ellipse(lcd2,rect16(point16(x,y),5),color2_t::purple);
         }
     }
     anim_screen.update();
