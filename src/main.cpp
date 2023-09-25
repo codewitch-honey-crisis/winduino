@@ -616,7 +616,7 @@ open_text_info oti;
 oti.font = &text_font;
 oti.scale = oti.font->scale(50);
 oti.text = "Hello world!";
-// reading SPI displays is slow so we don't.
+// reading SPI displays is slow so we don't. In fact, bitmaps are really the best way to draw
 auto bmp = create_bitmap_from(lcd2,{screen_size.width,screen_size.height});
 if(bmp.begin()) {
     bmp.fill(bmp.bounds(),color2_t::orange);
