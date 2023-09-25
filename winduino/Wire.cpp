@@ -33,7 +33,7 @@ extern "C" {
 #include "Arduino.h"
 
 TwoWire::TwoWire(uint8_t bus_num)
-    :num(bus_num & 1)
+    :num(bus_num >=I2C_PORT_MAX?I2C_PORT_MAX-1:bus_num)
     ,bufferSize(I2C_BUFFER_LENGTH) // default Wire Buffer Size
     ,rxBuffer(NULL)
     ,rxIndex(0)
@@ -235,7 +235,7 @@ uint8_t TwoWire::endTransmission(bool sendStop)
         uint8_t *p = txBuffer-1;
         *p=txAddress;
         rxLength = bufferSize;
-        hardware_transfer_bytes_i2c(p,txLength+1,rxBuffer,&rxLength);
+        hardware_transfer_bytes_i2c(num,p,txLength+1,rxBuffer,&rxLength);
         rxLength = 0;
     } else {
         //mark as non-stop
@@ -261,7 +261,7 @@ size_t TwoWire::requestFrom(uint16_t address, size_t size, bool sendStop)
         uint8_t *p = txBuffer-1;
         *p=txAddress|0x80;
         rxLength = bufferSize;
-        hardware_transfer_bytes_i2c(p,txLength+1,rxBuffer,&rxLength);
+        hardware_transfer_bytes_i2c(num,p,txLength+1,rxBuffer,&rxLength);
     } else {
         rxIndex = 0;
         rxLength = 0;
@@ -271,7 +271,7 @@ size_t TwoWire::requestFrom(uint16_t address, size_t size, bool sendStop)
         rxLength = bufferSize;
         //Serial.printf("read txLength: %d\r\n",txLength);
         
-        hardware_transfer_bytes_i2c(p,txLength+1,rxBuffer,&rxLength);
+        hardware_transfer_bytes_i2c(num,p,txLength+1,rxBuffer,&rxLength);
         
     }
     return rxLength;
@@ -397,6 +397,15 @@ uint8_t TwoWire::endTransmission(void)
     return endTransmission(true);
 }
 
-
+#if I2C_PORT_MAX > 0
 TwoWire Wire = TwoWire(0);
-//TwoWire Wire1 = TwoWire(1);
+#endif
+#if I2C_PORT_MAX > 1
+TwoWire Wire1 = TwoWire(1);
+#endif
+#if I2C_PORT_MAX > 2
+TwoWire Wire2 = TwoWire(2);
+#endif
+#if I2C_PORT_MAX > 3
+TwoWire Wire3 = TwoWire(3);
+#endif

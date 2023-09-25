@@ -606,6 +606,8 @@ void setup() {
     hardware_set_pin(hw_screen,5, SPI_SCREEN_PIN_CS);
     hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
     hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
+    hardware_attach_spi(hw_screen,0);
+    hardware_attach_i2c(hw_screen,0);
 lcd2.initialize();
 if(touch2.initialize()==false) {
     Serial.println("Could not find FT6236");

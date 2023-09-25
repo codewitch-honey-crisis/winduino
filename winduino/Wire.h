@@ -25,7 +25,7 @@
 
 #ifndef TwoWire_h
 #define TwoWire_h
-
+#include "Arduino.h"
 #include "Stream.h"
 #define SCL 21
 #define SDA 22
@@ -146,6 +146,17 @@ public:
 
 };
 
+#if I2C_PORT_MAX > 0
 extern TwoWire Wire;
+#endif
+#if I2C_PORT_MAX > 1
+extern TwoWire Wire1;
+#endif
+#if I2C_PORT_MAX > 2
+extern TwoWire Wire2;
+#endif
+#if I2C_PORT_MAX > 3
+extern TwoWire Wire3;
+#endif
 
 #endif

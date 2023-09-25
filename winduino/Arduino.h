@@ -9,6 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#ifndef I2C_PORT_MAX
+#define I2C_PORT_MAX 4
+#endif
+#ifndef SPI_PORT_MAX
+#define SPI_PORT_MAX 6
+#endif
 #define SERIAL  0x0
 #define DISPLAY 0x1
 
@@ -117,7 +123,7 @@ static const uint8_t D7 = 8;
 static const uint8_t D8 = 9;
 static const uint8_t D9 = 10;
 static const uint8_t D10 = 11;
-
+typedef void* hw_handle_t;
 // useful for libs like LVGL that can't use DirectX native format
 // #define USE_RGBA8888
 constexpr static const struct {
@@ -173,12 +179,49 @@ void flush_bitmap(int x1, int y1, int w, int h, const void* bmp );
 /// @param out_location The location
 /// @return True if the button is pressed
 bool read_mouse(int* out_x, int* out_y);
-void* hardware_load(const char* name);
-bool hardware_set_pin(void* hw, uint8_t mcu_pin, uint8_t hw_pin);
-bool hardware_configure(void* hw, int prop, void* data, size_t size);
-bool hardware_transfer_bits_spi(uint8_t* data, size_t size_bits);
-bool hardware_transfer_bytes_i2c(const uint8_t*in, size_t in_size, uint8_t* out,size_t* in_out_out_size);
-bool hardware_attach_log(void* hw);
+/// @brief Loads a DLL that emulates hardware 
+/// @param name The DLL file to load
+/// @return a handle to the loaded hardware
+hw_handle_t hardware_load(const char* name);
+/// @brief Attaches a pin to the hardware
+/// @param hw A handle to the hardware
+/// @param mcu_pin The pin on the virtual MCU
+/// @param hw_pin The pin in the virtual hardare (included with header)
+/// @return True if success, otherwise false
+bool hardware_set_pin(hw_handle_t hw, uint8_t mcu_pin, uint8_t hw_pin);
+/// @brief Configures the hardware. This must be done immediately after load
+/// @param hw A handle to the hardware
+/// @param prop The property to set (included with the header)
+/// @param data The value (type depends on the property)
+/// @param size The size of the value data
+/// @return True if successful, otherwise false
+bool hardware_configure(hw_handle_t hw, int prop, void* data, size_t size);
+/// @brief Transmits the specified number of bits over the virtual SPI subsystem
+/// @param data The data to transmit, on return this contains new data
+/// @param size_bits The number of bits of data to transmit
+/// @return True if successful, otherwise false
+bool hardware_transfer_bits_spi(uint8_t port,uint8_t* data, size_t size_bits);
+/// @brief Transmits the specified number of bytes over the virtual I2C subsystem
+/// @param in The input buffer
+/// @param in_size The size of the input contents
+/// @param out The output buffer
+/// @param in_out_out_size The size of the input buffer. On return the size of the data actually read
+/// @return True if successful, otherwise false
+bool hardware_transfer_bytes_i2c(uint8_t port,const uint8_t*in, size_t in_size, uint8_t* out,size_t* in_out_out_size);
+/// @brief Attaches the logging system to the hardware so that it can log to the console
+/// @param hw A handle to the hardware
+/// @return True if successful, otherwise false
+bool hardware_attach_log(hw_handle_t hw);
+/// @brief Attaches hardware to an SPI port
+/// @param hw The hardware handle
+/// @param port The SPI port to attach to
+/// @return True if successful, otherwise false
+bool hardware_attach_spi(hw_handle_t hw, uint8_t port);
+/// @brief Attaches hardware to an I2C port
+/// @param hw The hardware handle
+/// @param port The I2C port to attach to
+/// @return True if successful, otherwise false
+bool hardware_attach_i2c(hw_handle_t hw, uint8_t port);
 #include <algorithm>
 #include <cmath>
 #include <math.h>

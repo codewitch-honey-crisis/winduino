@@ -994,7 +994,9 @@ int CALL TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_
         }
         //logfmt("loop tail - in_size: %d",in_size);
     }
-    *in_out_out_size = out_size;
+    if(out_size!=0) {
+        *in_out_out_size = out_size;
+    }
     return 0;    
 }
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {

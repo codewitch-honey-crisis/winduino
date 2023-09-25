@@ -32,10 +32,27 @@
 
 #include "Arduino.h"
 
-SPIClass SPI;
+#if SPI_PORT_MAX > 0
+SPIClass SPI = SPIClass(0);
+#endif
+#if SPI_PORT_MAX > 1
+SPIClass SPI1 = SPIClass(1);
+#endif
+#if SPI_PORT_MAX > 2
+SPIClass SPI2 = SPIClass(2);
+#endif
+#if SPI_PORT_MAX > 3
+SPIClass SPI3 = SPIClass(3);
+#endif
+#if SPI_PORT_MAX > 4
+SPIClass SPI4 = SPIClass(4);
+#endif
+#if SPI_PORT_MAX > 5
+SPIClass SPI5 = SPIClass(5);
+#endif
 
-SPIClass::SPIClass(uint8_t spi_bus) : _use_hw_ss(true), _sck(-1), _miso(-1), _mosi(-1), _ss(-1), _freq(10 * 1000 * 1000), _inTransaction(false),_clock_div(SPI_CLOCK_DIV2),_bitOrder(MSBFIRST),_dataMode(SPI_MODE0),_cke(0),_ckp(0),_delay(2) {
-    (void)spi_bus; // unused
+
+SPIClass::SPIClass(uint8_t spi_bus) : _port(spi_bus), _use_hw_ss(true), _sck(-1), _miso(-1), _mosi(-1), _ss(-1), _freq(10 * 1000 * 1000), _inTransaction(false),_clock_div(SPI_CLOCK_DIV2),_bitOrder(MSBFIRST),_dataMode(SPI_MODE0),_cke(0),_ckp(0),_delay(2) {
 }
 SPIClass::~SPIClass() {
     end();
@@ -166,7 +183,7 @@ void SPIClass::transfer(void* data, uint32_t size) {
         digitalWrite(_ss,LOW);
         
     }
-    hardware_transfer_bits_spi((uint8_t*)data,size*8);
+    hardware_transfer_bits_spi(_port,(uint8_t*)data,size*8);
     if(reset_cs) {
         digitalWrite(_ss,HIGH);
     }
@@ -177,7 +194,7 @@ uint8_t SPIClass::transfer(uint8_t val) {
         digitalWrite(_ss,LOW);
         
     }
-    hardware_transfer_bits_spi(&val,8);
+    hardware_transfer_bits_spi(_port,&val,8);
     if(reset_cs) {
         digitalWrite(_ss,HIGH);
     }

@@ -44,6 +44,15 @@ typedef struct hardware_connection {
     uint8_t pin;
     hardware_connection* next;
 } hardware_connection_t;
+typedef struct hardware_spi_list {
+    hardware_transfer_bits_spi_fn fn;
+    hardware_spi_list* next;
+} hardware_spi_list_t;
+typedef struct hardware_i2c_list {
+    hardware_transfer_bytes_i2c_fn fn;
+    hardware_i2c_list* next;
+} hardware_i2c_list_t;
+
 static bool is_isr = false;
 typedef struct gpio {
     uint8_t id;
@@ -165,7 +174,10 @@ typedef struct gpio {
         }
     }
 } gpio_t;
-static hardware_handle_t* hardware_head = nullptr;
+
+static hardware_handle_t* hardware_head;
+static hardware_spi_list_t* spi_devices[SPI_PORT_MAX] = {nullptr};
+static hardware_i2c_list_t* i2c_devices[I2C_PORT_MAX] = {nullptr};
 static gpio_t gpios[256];
 
 // so we can implement millis(), delay()
@@ -841,14 +853,14 @@ void* hardware_load(const char* name) {
     }
     return result;
 }
-bool hardware_set_pin(void* hw, uint8_t mcu_pin, uint8_t hw_pin) {
+bool hardware_set_pin(hw_handle_t hw, uint8_t mcu_pin, uint8_t hw_pin) {
     if (hw == nullptr) {
         return false;
     }
     return gpios[mcu_pin].connect((hardware_handle_t*)hw, hw_pin);
 }
 
-bool hardware_configure(void* hw, int prop, void* data, size_t size) {
+bool hardware_configure(hw_handle_t hw, int prop, void* data, size_t size) {
     if (hw == nullptr) {
         return false;
     }
@@ -856,17 +868,28 @@ bool hardware_configure(void* hw, int prop, void* data, size_t size) {
     if (h->configure == nullptr) return false;
     return 0 == h->configure(prop, data, size);
 }
-bool hardware_transfer_bits_spi(uint8_t* data, size_t size_bits) {
-    hardware_handle_t* h = hardware_head;
-    while (h != nullptr) {
-        if (h->transfer_bits_spi != nullptr) {
-            h->transfer_bits_spi(data, size_bits);
-        }
-        h = h->next;
+bool hardware_transfer_bits_spi(uint8_t port,uint8_t* data, size_t size_bits) {
+    if(port>=SPI_PORT_MAX) {
+        return false;
     }
+    hardware_spi_list_t* current = spi_devices[port];
+    while(current!=nullptr) {
+        current->fn(data,size_bits);
+        current=current->next;
+    }
+    
     return true;
 }
-bool hardware_transfer_bytes_i2c(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size) {
+bool hardware_transfer_bytes_i2c(uint8_t port,const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size) {
+    if(port>=I2C_PORT_MAX) {
+        return false;
+    }
+    hardware_spi_list_t* current = spi_devices[port];
+    while(current!=nullptr) {
+        //current->fn(in,in_size,);
+        current=current->next;
+    }
+    
     hardware_handle_t* h = hardware_head;
     while (h != nullptr) {
         if (h->transfer_bytes_i2c != nullptr) {
@@ -887,6 +910,58 @@ bool hardware_attach_log(void* hw) {
     hardware_handle_t* h = (hardware_handle_t*)hw;
     if (h->attach_log != nullptr) {
         h->attach_log(logger_log);
+    }
+    return true;
+}
+bool hardware_attach_spi(hw_handle_t hw, uint8_t port) {
+    if(hw==nullptr) {return false;}
+    if(port>=SPI_PORT_MAX) {
+        return false;
+    }
+    hardware_handle_t* h = (hardware_handle_t*)hw;
+    if(h->transfer_bits_spi==nullptr) {
+        return false;
+    }
+    hardware_spi_list_t* result = new hardware_spi_list_t();
+    result->fn = h->transfer_bits_spi;
+    result->next = nullptr;
+    if (spi_devices[port] == nullptr) {
+        spi_devices[port] = result;
+    } else {
+        hardware_spi_list_t* p = spi_devices[port];
+        while (p != nullptr) {
+            if (p->next == nullptr) {
+                p->next = result;
+                break;
+            }
+            p = p->next;
+        }
+    }
+    return true;
+}
+bool hardware_attach_i2c(hw_handle_t hw, uint8_t port) {
+    if(hw==nullptr) {return false;}
+    if(port>=I2C_PORT_MAX) {
+        return false;
+    }
+    hardware_handle_t* h = (hardware_handle_t*)hw;
+    if(h->transfer_bytes_i2c==nullptr) {
+        return false;
+    }
+    hardware_i2c_list_t* result = new hardware_i2c_list_t();
+    result->fn = h->transfer_bytes_i2c;;
+    result->next = nullptr;
+    if (i2c_devices[port] == nullptr) {
+        i2c_devices[port] = result;
+    } else {
+        hardware_i2c_list_t* p = i2c_devices[port];
+        while (p != nullptr) {
+            if (p->next == nullptr) {
+                p->next = result;
+                break;
+            }
+            p = p->next;
+        }
     }
     return true;
 }

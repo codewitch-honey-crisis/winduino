@@ -20,7 +20,7 @@
 */
 #ifndef _SPI_H_INCLUDED
 #define _SPI_H_INCLUDED
-
+#include "Arduino.h"
 #include <stdlib.h>
 #include <stdint.h>
 #define SPI_HAS_TRANSACTION
@@ -61,6 +61,7 @@ public:
 class SPIClass
 {
 private:
+    uint8_t _port;
     bool _use_hw_ss;
     int16_t _sck;
     int16_t _miso;
@@ -103,6 +104,23 @@ public:
     int8_t pinSS() { return _ss; }
 };
 
+#if SPI_PORT_MAX > 0
 extern SPIClass SPI;
+#endif
+#if SPI_PORT_MAX > 1
+extern SPIClass SPI1;
+#endif
+#if SPI_PORT_MAX > 2
+extern SPIClass SPI2;
+#endif
+#if SPI_PORT_MAX > 3
+extern SPIClass SPI3;
+#endif
+#if SPI_PORT_MAX > 4
+extern SPIClass SPI4;
+#endif
+#if SPI_PORT_MAX > 5
+extern SPIClass SPI5;
+#endif
 
 #endif
