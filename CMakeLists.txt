@@ -18,7 +18,8 @@ add_library(winduino
                 winduino/StdioFSImpl.cpp
                 winduino/FS.cpp
                 winduino/SD.cpp
-                winduino/SPI.cpp)
+                winduino/SPI.cpp
+                winduino/Wire.cpp)
 target_link_libraries(winduino ${DXLIBS} )
 target_include_directories(winduino PUBLIC
     "${PROJECT_SOURCE_DIR}"    
@@ -75,7 +76,7 @@ target_include_directories(example PUBLIC
     "${PROJECT_SOURCE_DIR}/lib/htcw_uix/include"
     "${PROJECT_SOURCE_DIR}/lib/htcw_tft_io/include"
     "${PROJECT_SOURCE_DIR}/lib/htcw_st7789/include"
-
+    "${PROJECT_SOURCE_DIR}/lib/htcw_ft6236/include"
     "${PROJECT_BINARY_DIR}"
     "${PROJECT_SOURCE_DIR}/include"
   )

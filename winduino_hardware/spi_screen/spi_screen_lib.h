@@ -18,6 +18,7 @@ DLL_API int CALL Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callbac
 DLL_API int CALL Update();
 DLL_API int CALL PinChange(uint8_t pin, uint32_t value);
 DLL_API int CALL TransferBitsSPI(uint8_t* data, size_t size_bits);
+DLL_API int CALL TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size);
 DLL_API int CALL AttachLog(log_callback logger);
 #ifdef __cplusplus
 } // __cplusplus defined.

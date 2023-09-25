@@ -18,10 +18,24 @@
 
 #pragma comment(lib, "d2d1.lib")
 
-#define TFT_CASET 0x2A
-#define TFT_PASET 0x2B
-#define TFT_RAMWR 0x2C
-#define TFT_RAMRD 0x2E
+static const uint8_t TFT_CASET = 0x2A;
+static const uint8_t TFT_PASET = 0x2B;
+static const uint8_t TFT_RAMWR = 0x2C;
+static const uint8_t TFT_RAMRD = 0x2E;
+
+constexpr static const uint8_t TOUCH_REG_MODE = 0x00;
+constexpr static const uint8_t TOUCH_REG_XL = 0x04;
+constexpr static const uint8_t TOUCH_REG_XH = 0x03;
+constexpr static const uint8_t TOUCH_REG_YL = 0x06;
+constexpr static const uint8_t TOUCH_REG_YH = 0x05;
+constexpr static const uint8_t TOUCH_REG_NUMTOUCHES = 0x2;
+constexpr static const uint8_t TOUCH_REG_THRESHHOLD = 0x80;
+constexpr static const uint8_t TOUCH_REG_VENDID = 0xA8;
+constexpr static const uint8_t TOUCH_REG_CHIPID = 0xA3;
+constexpr static const uint8_t FT6236_VENDID = 0x11;
+constexpr static const uint8_t FT6206_CHIPID = 0x6;
+constexpr static const uint8_t FT6236_CHIPID = 0x36;
+constexpr static const uint8_t FT6236U_CHIPID = 0x64;
 
 static struct {
     uint16_t width;
@@ -59,19 +73,31 @@ typedef struct input {
     }
 } input_t;
 
-typedef enum states {
-    STATE_INITIAL = 0,
-    STATE_IGNORING,
-    STATE_COLSET1,
-    STATE_COLSET2,
-    STATE_ROWSET1,
-    STATE_ROWSET2,
-    STATE_WRITE,
-    STATE_READ1,
-    STATE_READ2
-} states_t;
-static states_t st = STATE_INITIAL;
-bool bkl_low = false;
+typedef enum screen_states {
+    SCREEN_STATE_INITIAL = 0,
+    SCREEN_STATE_IGNORING,
+    SCREEN_STATE_COLSET1,
+    SCREEN_STATE_COLSET2,
+    SCREEN_STATE_ROWSET1,
+    SCREEN_STATE_ROWSET2,
+    SCREEN_STATE_WRITE,
+    SCREEN_STATE_READ1,
+    SCREEN_STATE_READ2
+} screen_states_t;
+typedef enum touch_states {
+    TOUCH_STATE_INITIAL = 0,
+    TOUCH_STATE_IGNORING,
+    TOUCH_STATE_ADDRESS,
+    TOUCH_STATE_READ,
+    TOUCH_STATE_WRITE
+} touch_states_t;
+
+static screen_states_t screen_st = SCREEN_STATE_INITIAL;
+static uint8_t touch_address = 0x38;
+static bool touch_factory_mode = false;
+static int touch_current_reg = -1;
+static uint8_t touch_threshhold = 0x80;
+static bool bkl_low = false;
 static uint8_t colset = TFT_CASET;
 static uint8_t rowset = TFT_PASET;
 static uint8_t write = TFT_RAMWR;
@@ -95,10 +121,17 @@ static HANDLE render_thread = NULL;
 static HANDLE quit_event = NULL;
 static int reset_state = false;
 static HANDLE screen_ready = NULL;
+static HANDLE touch_mutex = NULL;
 static log_callback logger = NULL;
 static HMODULE hInstance = NULL;
 static bool in_pixel_transfer = false;
 static volatile DWORD render_changed = 1;
+
+// mouse mess
+static struct { int x; int y; } mouse_loc;
+static int mouse_state = 0;  // 0 = released, 1 = pressed
+static int old_mouse_state = 0;
+static int mouse_req = 0;
 // directX stuff
 static ID2D1HwndRenderTarget* render_target = nullptr;
 static ID2D1Factory* d2d_factory = nullptr;
@@ -137,6 +170,26 @@ static void logfmt(const char* format, ...) {
     }
     return;
 }
+// updates the window title with the FPS and any mouse info
+static void update_title(HWND hwnd) {
+    wchar_t wsztitle[64];
+    uint16_t f;
+    wcscpy(wsztitle, L"SPI Screen");
+    if(WAIT_OBJECT_0==WaitForSingleObject(touch_mutex,INFINITE)) {
+        if (mouse_state) {
+            wcscat(wsztitle, L" (");
+            f = mouse_loc.x;
+            _itow((int)f, wsztitle + wcslen(wsztitle), 10);
+            wcscat(wsztitle, L", ");
+            f = mouse_loc.y;
+            _itow((int)f, wsztitle + wcslen(wsztitle), 10);
+            wcscat(wsztitle, L")");
+        }
+        ReleaseMutex(touch_mutex);
+        SetWindowTextW(hwnd, wsztitle);
+    }
+    
+}
 static LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == WM_CLOSE) {
         SetEvent(quit_event);
@@ -152,6 +205,12 @@ static DWORD window_thread_proc(void* state) {
     if (frame_buffer == nullptr) {
         frame_buffer = (uint8_t*)malloc(4 * screen_size.width * screen_size.height);
         if (frame_buffer == nullptr) {
+            return 1;
+        }
+    }
+    if(touch_mutex==nullptr) {
+        touch_mutex = CreateMutex(NULL, FALSE, NULL);
+        if(touch_mutex==NULL) {
             return 1;
         }
     }
@@ -258,6 +317,64 @@ static DWORD window_thread_proc(void* state) {
             }
             // handle out of band
             // window messages here
+            if (msg.message == WM_LBUTTONDOWN) {
+                if(LOWORD(msg.lParam)<screen_size.width && 
+                    HIWORD(msg.lParam)<screen_size.height) {
+                    SetCapture(msg.hwnd);
+                    
+                    if (WAIT_OBJECT_0 == WaitForSingleObject(
+                                            touch_mutex,  // handle to mutex
+                                            INFINITE)) {   // no time-out interval)
+                        old_mouse_state = mouse_state;
+                        mouse_state = 1;
+                        mouse_loc.x = LOWORD(msg.lParam);
+                        if(mouse_loc.x<0 || (mouse_loc.x & 0x8000)) mouse_loc.x=0;
+                        if(mouse_loc.x>=screen_size.width) mouse_loc.x = screen_size.width-1;
+                        mouse_loc.y = HIWORD(msg.lParam);
+                        if(mouse_loc.y<0 || (mouse_loc.y & 0x8000)) mouse_loc.y=0;
+                        if(mouse_loc.y>=screen_size.height) mouse_loc.y = screen_size.height-1;
+                        mouse_req = 1;
+                        ReleaseMutex(touch_mutex);
+                    }
+                    update_title(msg.hwnd);
+                }
+            }
+            if (msg.message == WM_MOUSEMOVE) {
+                if (WAIT_OBJECT_0 == WaitForSingleObject(
+                                         touch_mutex,  // handle to mutex
+                                         INFINITE)) {   // no time-out interval)
+                    if (mouse_state == 1 && MK_LBUTTON == msg.wParam) {
+                        mouse_req = 1;
+                        mouse_loc.x = LOWORD(msg.lParam);
+                        if(mouse_loc.x<0 || (mouse_loc.x & 0x8000)) mouse_loc.x=0;
+                        if(mouse_loc.x>=screen_size.width) mouse_loc.x = screen_size.width-1;
+                        mouse_loc.y = HIWORD(msg.lParam);
+                        if(mouse_loc.y<0 || (mouse_loc.y & 0x8000)) mouse_loc.y=0;
+                        if(mouse_loc.y>=screen_size.height) mouse_loc.y = screen_size.height-1;
+                    }
+                    ReleaseMutex(touch_mutex);
+                }
+                update_title(msg.hwnd);
+            }
+            if (msg.message == WM_LBUTTONUP) {
+                ReleaseCapture();
+                if (WAIT_OBJECT_0 == WaitForSingleObject(
+                                         touch_mutex,  // handle to mutex
+                                         INFINITE)) {   // no time-out interval)
+
+                    old_mouse_state = mouse_state;
+                    mouse_req = 1;
+                    mouse_state = 0;
+                    mouse_loc.x = LOWORD(msg.lParam);
+                    if(mouse_loc.x<0 || (mouse_loc.x & 0x8000)) mouse_loc.x=0;
+                    if(mouse_loc.x>=screen_size.width) mouse_loc.x = screen_size.width-1;
+                    mouse_loc.y = HIWORD(msg.lParam);
+                    if(mouse_loc.y<0 || (mouse_loc.y & 0x8000)) mouse_loc.y=0;
+                    if(mouse_loc.y>=screen_size.height) mouse_loc.y = screen_size.height-1;
+                    ReleaseMutex(touch_mutex);
+                }
+                update_title(msg.hwnd);
+            }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
@@ -292,16 +409,16 @@ static DWORD window_thread_proc(void* state) {
     }
     return 0;
 }
-static uint8_t process_byte(uint8_t val) {
+static uint8_t process_byte_spi(uint8_t val) {
     if (can_configure) return val;
     if (dc.value()) {
-        if (st == STATE_INITIAL) {
+        if (screen_st == SCREEN_STATE_INITIAL) {
             return 0;
         }
         int x, y;
         uint8_t* p;
-        switch (st) {
-            case STATE_WRITE:
+        switch (screen_st) {
+            case SCREEN_STATE_WRITE:
                 switch (offset) {
                     case 0:
                         data_word = val << 8;
@@ -334,7 +451,7 @@ static uint8_t process_byte(uint8_t val) {
                                     ReleaseMutex(render_mutex);
                                 }
                                 in_pixel_transfer = false;
-                                st = STATE_IGNORING;
+                                screen_st = SCREEN_STATE_IGNORING;
                                 break;
                             }
                         }
@@ -345,19 +462,19 @@ static uint8_t process_byte(uint8_t val) {
                                 ReleaseMutex(render_mutex);
                             }
                             in_pixel_transfer = false;
-                            st = STATE_IGNORING;
+                            screen_st = SCREEN_STATE_IGNORING;
                         }
 
                         break;
                 }
 
                 break;
-            case STATE_READ1:
+            case SCREEN_STATE_READ1:
                 // toss this byte. quirk of the hardware
-                st = STATE_READ2;
+                screen_st = SCREEN_STATE_READ2;
                 bytes_read = 0;
                 break;
-            case STATE_READ2:
+            case SCREEN_STATE_READ2:
                 ++bytes_read;
                 val = 0;
                 x = column - screen_offsets.x;
@@ -390,10 +507,10 @@ static uint8_t process_byte(uint8_t val) {
                         ReleaseMutex(render_mutex);
                     }
                     in_pixel_transfer = false;
-                    st = STATE_IGNORING;
+                    screen_st = SCREEN_STATE_IGNORING;
                 }
                 break;
-            case STATE_COLSET1:
+            case SCREEN_STATE_COLSET1:
                 if (offset == 0) {
                     data_word = val << 8;
                     offset = 1;
@@ -401,10 +518,10 @@ static uint8_t process_byte(uint8_t val) {
                     data_word |= val;
                     offset = 0;
                     col_start = data_word;
-                    st = STATE_COLSET2;
+                    screen_st = SCREEN_STATE_COLSET2;
                 }
                 break;
-            case STATE_COLSET2:
+            case SCREEN_STATE_COLSET2:
                 if (offset == 0) {
                     data_word = val << 8;
                     offset = 1;
@@ -412,11 +529,11 @@ static uint8_t process_byte(uint8_t val) {
                     data_word |= val;
                     offset = 0;
                     col_end = data_word;
-                    st = STATE_IGNORING;
+                    screen_st = SCREEN_STATE_IGNORING;
                     // logfmt("col_start: %d, col_end: %d",col_start,col_end);
                 }
                 break;
-            case STATE_ROWSET1:
+            case SCREEN_STATE_ROWSET1:
                 if (offset == 0) {
                     data_word = val << 8;
                     offset = 1;
@@ -424,10 +541,10 @@ static uint8_t process_byte(uint8_t val) {
                     data_word |= val;
                     offset = 0;
                     row_start = data_word;
-                    st = STATE_ROWSET2;
+                    screen_st = SCREEN_STATE_ROWSET2;
                 }
                 break;
-            case STATE_ROWSET2:
+            case SCREEN_STATE_ROWSET2:
                 if (offset == 0) {
                     data_word = val << 8;
                     offset = 1;
@@ -435,7 +552,7 @@ static uint8_t process_byte(uint8_t val) {
                     data_word |= val;
                     offset = 0;
                     row_end = data_word;
-                    st = STATE_IGNORING;
+                    screen_st = SCREEN_STATE_IGNORING;
                     // logfmt("row_start: %d, row_end: %d",row_start,row_end);
                 }
                 break;
@@ -452,7 +569,7 @@ static uint8_t process_byte(uint8_t val) {
             in_pixel_transfer = false;
             data_word = 0;
             offset = 0;
-            st = STATE_COLSET1;
+            screen_st = SCREEN_STATE_COLSET1;
         } else if (cmd == rowset) {
             if (in_pixel_transfer) {
                 ReleaseMutex(render_mutex);
@@ -460,7 +577,7 @@ static uint8_t process_byte(uint8_t val) {
             in_pixel_transfer = false;
             data_word = 0;
             offset = 0;
-            st = STATE_ROWSET1;
+            screen_st = SCREEN_STATE_ROWSET1;
         } else if (cmd == write) {
             if (in_pixel_transfer) {
                 ReleaseMutex(render_mutex);
@@ -477,7 +594,7 @@ static uint8_t process_byte(uint8_t val) {
                     INFINITE);
                 if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
                     in_pixel_transfer = true;
-                    st = STATE_WRITE;
+                    screen_st = SCREEN_STATE_WRITE;
                 } else {
                     in_pixel_transfer = false;
                 }
@@ -500,7 +617,7 @@ static uint8_t process_byte(uint8_t val) {
                     INFINITE);
                 if (WAIT_OBJECT_0 == wr) {  // no time-out interval)
                     in_pixel_transfer = true;
-                    st = STATE_READ1;
+                    screen_st = SCREEN_STATE_READ1;
                 } else {
                     in_pixel_transfer = false;
                 }
@@ -510,7 +627,7 @@ static uint8_t process_byte(uint8_t val) {
                 ReleaseMutex(render_mutex);
             }
             in_pixel_transfer = false;
-            st = STATE_IGNORING;
+            screen_st = SCREEN_STATE_IGNORING;
         }
     }
     return val;
@@ -692,12 +809,194 @@ int CALL TransferBitsSPI(uint8_t* data, size_t size_bits) {
     }
     size_t full_bytes = size_bits / 8;
     while (full_bytes--) {
-        *data = process_byte(*data);
+        *data = process_byte_spi(*data);
         data++;
     }
     return 0;
 }
+int CALL TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size) {
+    
+    //logfmt("addr: %X, in_size: %d, out_size: %d%s",*in&0x7f,in_size,*in_out_out_size,*in&0x80?" (read)":" (write)");
 
+    if (in == nullptr) {
+        return 1;
+    }
+    int val;
+    size_t out_size = 0;
+    touch_states_t touch_st = TOUCH_STATE_INITIAL;
+    while(in_size) {
+        switch (touch_st) {
+            case TOUCH_STATE_INITIAL:
+                touch_st = TOUCH_STATE_ADDRESS;
+                // fall through
+            case TOUCH_STATE_ADDRESS:
+                if ((*in & 0x7F) != touch_address) {
+                    //logfmt("ignoring data not addressed to FT6236 - address %02X",(*in & 0x7F));
+                    return 0;  // not our message
+                }
+                if ((*in & 0x80)) {
+                    touch_st = TOUCH_STATE_READ;
+                } else {
+                    touch_st = TOUCH_STATE_WRITE;
+                }
+                ++in;
+                --in_size;
+                if(touch_st!=TOUCH_STATE_READ) {
+                    break;
+                }
+            case TOUCH_STATE_READ:
+                if(touch_current_reg<0) {
+                    // our I2C register was not set
+                    return 2;
+                }
+                switch(touch_current_reg) {
+                    case TOUCH_REG_XL:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<1) {
+                            return 1;
+                        }
+                        if(WAIT_OBJECT_0==WaitForSingleObject(touch_mutex,INFINITE)) {
+                            *out = mouse_loc.x & 0xFF;
+                            ReleaseMutex(touch_mutex);
+                        } else {
+                            return 3;
+                        }
+                        ++out_size;
+                        touch_st = TOUCH_STATE_ADDRESS;
+                    break;
+                    case TOUCH_REG_XH:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<1) {
+                            return 1;
+                        }
+                        if(WAIT_OBJECT_0==WaitForSingleObject(touch_mutex,INFINITE)) {
+                            *out = (mouse_loc.x & 0xFF00)>>8;
+                            ReleaseMutex(touch_mutex);
+                        } else {
+                            return 3;
+                        }
+                        ++out_size;
+                        touch_st = TOUCH_STATE_ADDRESS;
+                    break;
+                    case TOUCH_REG_YL:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<1) {
+                            return 1;
+                        }
+                        if(WAIT_OBJECT_0==WaitForSingleObject(touch_mutex,INFINITE)) {
+                            *out = mouse_loc.y & 0xFF;
+                            ReleaseMutex(touch_mutex);
+                        } else {
+                            return 3;
+                        }
+                        ++out_size;
+                        touch_st = TOUCH_STATE_ADDRESS;
+                    break;
+                    case TOUCH_REG_YH:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<1) {
+                            return 1;
+                        }
+                        ++out_size;
+                        
+                        if(WAIT_OBJECT_0==WaitForSingleObject(touch_mutex,INFINITE)) {
+                            *out = (mouse_loc.y & 0xFF00)>>8;
+                            ReleaseMutex(touch_mutex);
+                        } else {
+                            return 3;
+                        }
+                        touch_st = TOUCH_STATE_ADDRESS;
+                    break;
+                    case TOUCH_REG_NUMTOUCHES:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<1) {
+                            return 1;
+                        }
+                        ++out_size;
+                        if(WAIT_OBJECT_0==WaitForSingleObject(touch_mutex,INFINITE)) {
+                            *out = !!mouse_state;
+                            ReleaseMutex(touch_mutex);
+                        } else {
+                            return 3;
+                        }
+                        touch_st = TOUCH_STATE_ADDRESS;
+                    break;
+                    case TOUCH_REG_THRESHHOLD:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<1) {
+                            return 1;
+                        }
+                        ++out_size;
+                        *out = touch_threshhold;
+                        touch_st = TOUCH_STATE_ADDRESS;
+                    break;
+                    case TOUCH_REG_VENDID:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<1) {
+                            return 1;
+                        }
+                        //logfmt("touch VENDID read");
+                        *out  = FT6236_VENDID;
+                        ++out_size;
+                        touch_st = TOUCH_STATE_ADDRESS;
+                    break;
+                    case TOUCH_REG_CHIPID:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<1) {
+                            return 1;
+                        }
+                        *out = FT6236_CHIPID;
+                        ++out_size;
+                        touch_st = TOUCH_STATE_ADDRESS;
+                    break;
+                    case TOUCH_REG_MODE:
+                        if(in_out_out_size==nullptr || out==nullptr || *in_out_out_size<16) {
+                            return 1; // invalid args
+                        }
+                        *out++ = 0; // no idea what this is supposed to be?
+                        *out++ = 0; // ?
+                        if(WAIT_OBJECT_0==WaitForSingleObject(touch_mutex,INFINITE)) {
+                            *out++ = !!mouse_state;
+                            *out++ = (mouse_loc.x & 0xFF00)>>8;
+                            *out++ = mouse_loc.x & 0x00FF;
+                            *out++ = (mouse_loc.y & 0xFF00)>>8;
+                            *out++ = mouse_loc.y & 0x00FF;
+                            // garbage for the second touch
+                            // we don't support it
+                            out_size+=16;
+                            touch_st = TOUCH_STATE_ADDRESS;
+                            ReleaseMutex(touch_mutex);
+                        } else {
+                            return 3;
+                        }
+                        
+                    break;
+                }
+                break;
+            case TOUCH_STATE_WRITE:
+                //logfmt("touch state write");
+                if(in_size<1) {
+                    return 1;
+                }
+                //logfmt("touch set current register %02X",*in);
+                touch_current_reg = *in++;
+                --in_size;
+                if(in_size) {
+                    switch(touch_current_reg) {
+                        case TOUCH_REG_THRESHHOLD:
+                            if(in_size<1) {
+                                return 1;
+                            }
+                            //logfmt("reg write threshold");
+                            touch_threshhold = *in++;
+                            --in_size;
+                            break;
+                        default:
+                            touch_threshhold = *in++;
+                            --in_size;
+                            break;
+                    }
+                }
+                touch_st = TOUCH_STATE_ADDRESS;
+                break;
+        }
+        //logfmt("loop tail - in_size: %d",in_size);
+    }
+    *in_out_out_size = out_size;
+    return 0;    
+}
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     switch (fdwReason) {
         case DLL_PROCESS_ATTACH:

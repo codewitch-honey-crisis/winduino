@@ -1,16 +1,16 @@
 #define UNICODE
 #if defined(UNICODE) && !defined(_UNICODE)
-    #define _UNICODE
+#define _UNICODE
 #elif defined(_UNICODE) && !defined(UNICODE)
-    #define UNICODE
+#define UNICODE
 #endif
 
 /////////////////////////////////////////////////////
 #include <assert.h>
 #include <conio.h>
 #include <d2d1.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <windows.h>
 
 /////////////////////////////////////////////////////
@@ -19,15 +19,15 @@
 
 #include "Arduino.h"
 
-
-typedef __cdecl void(*gpio_set_callback)(uint32_t value, void* state);
-typedef __cdecl uint8_t(*gpio_get_callback)(void* state);
-typedef __cdecl int(*hardware_configure_fn)(int prop, void* data, size_t size);
-typedef __cdecl int(*hardware_connect_fn)(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter, void* state);
-typedef __cdecl int(*hardware_update_fn)(void);
-typedef __cdecl int(*hardware_pin_change_fn)(uint8_t pin, uint32_t value);
-typedef __cdecl int(*hardware_transfer_bits_spi_fn)(uint8_t* data, size_t size_bits);
-typedef __cdecl int(*hardware_attach_log_fn)(hardware_log_callback);
+typedef __cdecl void (*gpio_set_callback)(uint32_t value, void* state);
+typedef __cdecl uint8_t (*gpio_get_callback)(void* state);
+typedef __cdecl int (*hardware_configure_fn)(int prop, void* data, size_t size);
+typedef __cdecl int (*hardware_connect_fn)(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter, void* state);
+typedef __cdecl int (*hardware_update_fn)(void);
+typedef __cdecl int (*hardware_pin_change_fn)(uint8_t pin, uint32_t value);
+typedef __cdecl int (*hardware_transfer_bits_spi_fn)(uint8_t* data, size_t size_bits);
+typedef __cdecl int (*hardware_transfer_bytes_i2c_fn)(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size);
+typedef __cdecl int (*hardware_attach_log_fn)(hardware_log_callback);
 typedef struct hardware_handle {
     HMODULE hmodule;
     hardware_configure_fn configure;
@@ -35,6 +35,7 @@ typedef struct hardware_handle {
     hardware_update_fn update;
     hardware_pin_change_fn pin_change;
     hardware_transfer_bits_spi_fn transfer_bits_spi;
+    hardware_transfer_bytes_i2c_fn transfer_bytes_i2c;
     hardware_attach_log_fn attach_log;
     hardware_handle* next;
 } hardware_handle_t;
@@ -54,46 +55,46 @@ typedef struct gpio {
         return m_value;
     }
     void value(uint32_t value) {
-        if(interrupt_mode==LOW) {
-            if(m_value!=value) {
+        if (interrupt_mode == LOW) {
+            if (m_value != value) {
                 m_value = value;
                 notify_changed();
             }
-            if(!value && interrupt_cb!=nullptr) {
+            if (!value && interrupt_cb != nullptr) {
                 is_isr = true;
                 interrupt_cb();
                 is_isr = false;
             }
-        } else if(value!=m_value) {
-            switch(interrupt_mode) {
+        } else if (value != m_value) {
+            switch (interrupt_mode) {
                 case FALLING:
-                if(!value && interrupt_cb!=nullptr) {
-                    is_isr = true;
-                    interrupt_cb();
-                    is_isr = false;
-                }
-                break;
+                    if (!value && interrupt_cb != nullptr) {
+                        is_isr = true;
+                        interrupt_cb();
+                        is_isr = false;
+                    }
+                    break;
                 case RISING:
-                if(value && interrupt_cb!=nullptr) {
-                    is_isr = true;
-                    interrupt_cb();
-                    is_isr = false;
-                }
-                break;
+                    if (value && interrupt_cb != nullptr) {
+                        is_isr = true;
+                        interrupt_cb();
+                        is_isr = false;
+                    }
+                    break;
                 case CHANGE:
-                if(interrupt_cb!=nullptr) {
-                    is_isr = true;
-                    interrupt_cb();
-                    is_isr = false;
-                }
-                break;
+                    if (interrupt_cb != nullptr) {
+                        is_isr = true;
+                        interrupt_cb();
+                        is_isr = false;
+                    }
+                    break;
             }
             m_value = value;
             notify_changed();
         }
     }
     bool is_input() const {
-        switch(mode) {
+        switch (mode) {
             case INPUT:
             case INPUT_PULLUP:
             case INPUT_PULLDOWN:
@@ -103,7 +104,7 @@ typedef struct gpio {
         }
     }
     bool is_output() const {
-        switch(mode) {
+        switch (mode) {
             case OUTPUT:
             case OUTPUT_OPEN_DRAIN:
                 return true;
@@ -111,41 +112,41 @@ typedef struct gpio {
                 return false;
         }
     }
-    bool connect(hardware_handle_t* hw,uint8_t pin) {
-        if(hw==nullptr) {
+    bool connect(hardware_handle_t* hw, uint8_t pin) {
+        if (hw == nullptr) {
             return false;
         }
         hardware_connection_t* con = new hardware_connection_t();
-        if(con==nullptr) {
+        if (con == nullptr) {
             return false;
         }
-        if(0!=hw->connect(pin,get_pin,set_pin,this)) {
+        if (0 != hw->connect(pin, get_pin, set_pin, this)) {
             delete con;
             return false;
         }
-        
+
         con->next = nullptr;
         con->hardware = hw;
         con->pin = pin;
-        if(m_connect_list==nullptr) {
+        if (m_connect_list == nullptr) {
             m_connect_list = con;
         } else {
             hardware_connection_t* p = m_connect_list;
-            while(p!=nullptr) {
-                if(p->next==nullptr) {
+            while (p != nullptr) {
+                if (p->next == nullptr) {
                     p->next = con;
                     break;
                 }
-                p=p->next;
+                p = p->next;
             }
         }
         return true;
     }
-    
-private:
+
+   private:
     uint32_t m_value;
     hardware_connection_t* m_connect_list;
-    
+
     static uint8_t get_pin(void* state) {
         gpio* st = (gpio*)state;
         return st->value();
@@ -155,19 +156,17 @@ private:
         st->value(value);
     }
     void notify_changed() {
-        
         hardware_connection_t* p = m_connect_list;
-        while(p!=nullptr) {
-            if(p->hardware->pin_change!=nullptr) {
-                p->hardware->pin_change(p->pin,m_value);
+        while (p != nullptr) {
+            if (p->hardware->pin_change != nullptr) {
+                p->hardware->pin_change(p->pin, m_value);
             }
-            p=p->next;
+            p = p->next;
         }
     }
 } gpio_t;
-static hardware_handle_t* hardware_head=nullptr;
+static hardware_handle_t* hardware_head = nullptr;
 static gpio_t gpios[256];
-
 
 // so we can implement millis(), delay()
 static LARGE_INTEGER start_time;
@@ -190,7 +189,10 @@ static ID2D1HwndRenderTarget* render_target = nullptr;
 static ID2D1Factory* d2d_factory = nullptr;
 static ID2D1Bitmap* render_bitmap = nullptr;
 // mouse mess
-static struct { int x; int y; } mouse_loc;
+static struct {
+    int x;
+    int y;
+} mouse_loc;
 static int mouse_state = 0;  // 0 = released, 1 = pressed
 static int old_mouse_state = 0;
 static int mouse_req = 0;
@@ -202,50 +204,50 @@ static void update_title(HWND hwnd) {
     DWORD f = frames;
     _itow((int)f, wsztitle + wcslen(wsztitle), 10);
     wcscat(wsztitle, L" FPS");
-
-    if (mouse_state) {
-        wcscat(wsztitle, L" (");
-        f = mouse_loc.x;
-        _itow((int)f, wsztitle + wcslen(wsztitle), 10);
-        wcscat(wsztitle, L", ");
-        f = mouse_loc.y;
-        _itow((int)f, wsztitle + wcslen(wsztitle), 10);
-        wcscat(wsztitle, L")");
+    if (WAIT_OBJECT_0 == WaitForSingleObject(app_mutex, INFINITE)) {
+        if (mouse_state) {
+            wcscat(wsztitle, L" (");
+            f = mouse_loc.x;
+            _itow((int)f, wsztitle + wcslen(wsztitle), 10);
+            wcscat(wsztitle, L", ");
+            f = mouse_loc.y;
+            _itow((int)f, wsztitle + wcslen(wsztitle), 10);
+            wcscat(wsztitle, L")");
+        }
+        ReleaseMutex(app_mutex);
+        SetWindowTextW(hwnd, wsztitle);
     }
-    SetWindowTextW(hwnd, wsztitle);
 }
-const char * pathToFileName(const char * path)
-{
+const char* pathToFileName(const char* path) {
     size_t i = 0;
     size_t pos = 0;
-    char * p = (char *)path;
-    while(*p){
+    char* p = (char*)path;
+    while (*p) {
         i++;
-        if(*p == '/' || *p == '\\'){
+        if (*p == '/' || *p == '\\') {
             pos = i;
         }
         p++;
     }
-    return path+pos;
+    return path + pos;
 }
 // this handles our main application loop
 // plus rendering
 static DWORD render_thread_proc(void* state) {
-    
     bool quit = false;
     while (!quit) {
         hardware_handle_t* hw = hardware_head;
-        while(hw!=nullptr) {
-            if(hw->update!=nullptr) {
+        while (hw != nullptr) {
+            if (hw->update != nullptr) {
                 hw->update();
             }
-            hw=hw->next;
+            hw = hw->next;
         }
         loop();
         if (render_target && render_bitmap) {
             if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                     app_mutex,  // handle to mutex
-                                     INFINITE)) {   // no time-out interval)
+                                     app_mutex,    // handle to mutex
+                                     INFINITE)) {  // no time-out interval)
 
                 render_target->BeginDraw();
                 D2D1_RECT_F rect_dest = {
@@ -274,76 +276,76 @@ static LRESULT CALLBACK WindowProcMain(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
         SetEvent(quit_event);
         should_quit = true;
     }
-   
+
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 static LRESULT CALLBACK WindowProcGpio(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if(uMsg==WM_CREATE) {
-        gpio_t& g = *(gpio_t*)((LPCREATESTRUCT) lParam)->lpCreateParams;
-        SetWindowLongPtrW(hWnd,GWLP_USERDATA,(LONG_PTR)g.id);
+    if (uMsg == WM_CREATE) {
+        gpio_t& g = *(gpio_t*)((LPCREATESTRUCT)lParam)->lpCreateParams;
+        SetWindowLongPtrW(hWnd, GWLP_USERDATA, (LONG_PTR)g.id);
         HWND hwnd_st_u, hwnd_ed_u;
         int x, w, y, h;
-        y = 10; h = 20;
-        x = 10; w = 50;
+        y = 10;
+        h = 20;
+        x = 10;
+        w = 50;
         hwnd_st_u = CreateWindowW(L"static", L"ST_U",
-                              WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                              x, y, w, h,
-                              hWnd, (HMENU)(501),
-                              (HINSTANCE) GetModuleHandle(NULL), NULL);
+                                  WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                                  x, y, w, h,
+                                  hWnd, (HMENU)(501),
+                                  (HINSTANCE)GetModuleHandle(NULL), NULL);
         SetWindowTextW(hwnd_st_u, L"Value:");
 
-        x += w; w = 60;
+        x += w;
+        w = 60;
         hwnd_ed_u = CreateWindowW(L"edit", L"",
-                                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | (WS_DISABLED*(!g.is_input()))
-                                    | ES_LEFT | WS_BORDER,
-                                    x, y, w, h,
-                                    hWnd, (HMENU)(502),
-                                    (HINSTANCE) GetModuleHandle(NULL), NULL);
+                                  WS_CHILD | WS_VISIBLE | WS_TABSTOP | (WS_DISABLED * (!g.is_input())) | ES_LEFT | WS_BORDER,
+                                  x, y, w, h,
+                                  hWnd, (HMENU)(502),
+                                  (HINSTANCE)GetModuleHandle(NULL), NULL);
         wchar_t val[64];
-        if(g.value()==HIGH) {
-            wcscpy(val,L"HIGH");
-        } else if(g.value()==LOW) {
-            wcscpy(val,L"LOW");
+        if (g.value() == HIGH) {
+            wcscpy(val, L"HIGH");
+        } else if (g.value() == LOW) {
+            wcscpy(val, L"LOW");
         } else {
-            _itow(g.value(),val,10);
+            _itow(g.value(), val, 10);
         }
         SetWindowTextW(hwnd_ed_u, val);
         g.hwnd_text = hwnd_ed_u;
-        
     }
-    if(uMsg==WM_COMMAND) {
-        if(HIWORD (wParam) == EN_CHANGE) {
-            uint8_t gpio = GetWindowLongPtrW(hWnd,GWLP_USERDATA);
+    if (uMsg == WM_COMMAND) {
+        if (HIWORD(wParam) == EN_CHANGE) {
+            uint8_t gpio = GetWindowLongPtrW(hWnd, GWLP_USERDATA);
             wchar_t sz[1024];
             gpio_t& g = gpios[gpio];
-            GetWindowTextW((HWND)lParam,sz,sizeof(sz)/sizeof(wchar_t));
-            sz[63]=0;
-            if(0==wcsicmp(sz,L"LOW")) {
+            GetWindowTextW((HWND)lParam, sz, sizeof(sz) / sizeof(wchar_t));
+            sz[63] = 0;
+            if (0 == wcsicmp(sz, L"LOW")) {
                 g.value(LOW);
-            } else if(0==wcsicmp(sz,L"HIGH")) {
+            } else if (0 == wcsicmp(sz, L"HIGH")) {
                 g.value(HIGH);
             } else {
                 size_t l = wcslen(sz);
                 bool isnum = true;
-                for(int i = 0;i<l;++i) {
-                    if(!iswdigit(sz[i])) {
+                for (int i = 0; i < l; ++i) {
+                    if (!iswdigit(sz[i])) {
                         isnum = false;
                         break;
                     }
                 }
-                if(isnum) {
+                if (isnum) {
                     int v = _wtoi(sz);
                     g.value(v);
-                    
                 }
             }
         }
         return 0;
     }
     if (uMsg == WM_CLOSE) {
-        gpios[GetWindowLongPtrW(hWnd,GWLP_USERDATA)].hwnd_text = NULL;
+        gpios[GetWindowLongPtrW(hWnd, GWLP_USERDATA)].hwnd_text = NULL;
     }
-   
+
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 static LRESULT CALLBACK WindowProcDX(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -362,19 +364,18 @@ static LRESULT CALLBACK WindowProcDX(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
     return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-bool read_mouse(int* out_x,int *out_y) {
+bool read_mouse(int* out_x, int* out_y) {
     if (WAIT_OBJECT_0 == WaitForSingleObject(
-                             app_mutex,  // handle to mutex
-                             INFINITE)) {   // no time-out interval)
+                             app_mutex,    // handle to mutex
+                             INFINITE)) {  // no time-out interval)
 
         if (mouse_state) {
             *out_x = mouse_loc.x;
             *out_y = mouse_loc.y;
-        } 
+        }
         mouse_req = 0;
         ReleaseMutex(app_mutex);
         return mouse_state;
-    
     }
     return false;
 }
@@ -383,8 +384,8 @@ void flush_bitmap(int x1, int y1, int w, int h, const void* bmp) {
         D2D1_RECT_U b;
         b.top = y1;
         b.left = x1;
-        b.bottom = y1+h;
-        b.right = x1+w;
+        b.bottom = y1 + h;
+        b.right = x1 + w;
         render_bitmap->CopyFromMemory(&b, bmp, w * 4);
     }
 }
@@ -400,45 +401,47 @@ uint32_t micros() {
     LARGE_INTEGER end_time;
     QueryPerformanceFrequency(&counter_freq);
     QueryPerformanceCounter(&end_time);
-    return uint32_t(((double)(end_time.QuadPart - start_time.QuadPart) / counter_freq.QuadPart)*1000000.0);
+    return uint32_t(((double)(end_time.QuadPart - start_time.QuadPart) / counter_freq.QuadPart) * 1000000.0);
 }
 void delay(uint32_t ms) {
-    if(is_isr) return;
+    if (is_isr) return;
     uint32_t end = ms + millis();
-    while(millis()<end);
+    while (millis() < end)
+        ;
 }
 void delayMicroseconds(uint32_t us) {
     uint32_t end = us + micros();
-    while(micros()<end);
+    while (micros() < end)
+        ;
 }
 
 // write to the log window
 void append_log_window(const char* text) {
-   int index = GetWindowTextLength (hwnd_log);
-   //SetFocus (hwnd_log); // set focus
-   SendMessageA(hwnd_log, EM_SETSEL, (WPARAM)index, (LPARAM)index); // set selection - end of text
-   SendMessageA(hwnd_log, EM_REPLACESEL, 0, (LPARAM)text); // append!
+    int index = GetWindowTextLength(hwnd_log);
+    // SetFocus (hwnd_log); // set focus
+    SendMessageA(hwnd_log, EM_SETSEL, (WPARAM)index, (LPARAM)index);  // set selection - end of text
+    SendMessageA(hwnd_log, EM_REPLACESEL, 0, (LPARAM)text);           // append!
 }
 static void update_gpios() {
     updating_gpios = true;
-    while(GetMenuItemCount(gpio_menu)) {
-        RemoveMenu(gpio_menu,0,MF_BYPOSITION); 
+    while (GetMenuItemCount(gpio_menu)) {
+        RemoveMenu(gpio_menu, 0, MF_BYPOSITION);
     }
     wchar_t name[256];
-    for(size_t i = 0; i < 256; ++i) {
+    for (size_t i = 0; i < 256; ++i) {
         gpio_t& g = gpios[i];
-        if(g.mode!=0) {
-            wcscpy(name,L"GPIO ");
-            _itow((int)i,name+wcslen(name),10);
-            switch(g.mode) {
+        if (g.mode != 0) {
+            wcscpy(name, L"GPIO ");
+            _itow((int)i, name + wcslen(name), 10);
+            switch (g.mode) {
                 case INPUT:
                 case INPUT_PULLDOWN:
                 case INPUT_PULLUP:
-                    wcscat(name,L" <");
+                    wcscat(name, L" <");
                     break;
                 case OUTPUT:
                 case OUTPUT_OPEN_DRAIN:
-                    wcscat(name,L" >");
+                    wcscat(name, L" >");
             }
             MENUITEMINFOW mif;
             mif.cbSize = sizeof(MENUITEMINFOW);
@@ -446,39 +449,39 @@ static void update_gpios() {
             mif.dwTypeData = name;
             mif.fMask = MIIM_STRING | MIIM_ID | MIIM_STATE;
             mif.wID = (~i);
-            mif.fState = g.value()==0?MFS_UNCHECKED:MFS_CHECKED;
-            InsertMenuItemW(gpio_menu,GetMenuItemCount(gpio_menu),TRUE,&mif);
+            mif.fState = g.value() == 0 ? MFS_UNCHECKED : MFS_CHECKED;
+            InsertMenuItemW(gpio_menu, GetMenuItemCount(gpio_menu), TRUE, &mif);
         }
-        if(g.hwnd_text!=NULL) {
-                // update the visible text box
-                wchar_t val[64];
-                if(!g.is_input()) {
-                if(g.value()==HIGH) {
-                    wcscpy(val,L"HIGH");
-                } else if(g.value()==LOW) {
-                    wcscpy(val,L"LOW");
+        if (g.hwnd_text != NULL) {
+            // update the visible text box
+            wchar_t val[64];
+            if (!g.is_input()) {
+                if (g.value() == HIGH) {
+                    wcscpy(val, L"HIGH");
+                } else if (g.value() == LOW) {
+                    wcscpy(val, L"LOW");
                 } else {
-                    _itow(g.value(),val,10);
+                    _itow(g.value(), val, 10);
                 }
-                if(GetFocus()!=g.hwnd_text) {
+                if (GetFocus() != g.hwnd_text) {
                     SetWindowTextW(g.hwnd_text, val);
                 }
             }
-            EnableWindow(g.hwnd_text,g.is_input()?TRUE:FALSE);
+            EnableWindow(g.hwnd_text, g.is_input() ? TRUE : FALSE);
         }
     }
-    updating_gpios = false;   
+    updating_gpios = false;
 }
 void ensure_gpio_window(size_t gpio) {
-    if(gpio>255) {
+    if (gpio > 255) {
         return;
     }
-    if(gpios[gpio].hwnd_text) {
+    if (gpios[gpio].hwnd_text) {
         return;
     }
     wchar_t name[64];
-    wcscpy(name,L"GPIO ");
-    _itow(gpio,name+wcslen(name),10);
+    wcscpy(name, L"GPIO ");
+    _itow(gpio, name + wcslen(name), 10);
     HWND hwnd = CreateWindowExW(
         WS_EX_TOOLWINDOW, L"Winduino_GPIO", name,
         WS_CAPTION | WS_SYSMENU,
@@ -486,10 +489,10 @@ void ensure_gpio_window(size_t gpio) {
         200,
         100,
         NULL, NULL, GetModuleHandle(NULL), &gpios[gpio]);
-    if(hwnd==NULL) {
+    if (hwnd == NULL) {
         return;
     }
-    ShowWindow(hwnd,SW_SHOW);
+    ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
     SetForegroundWindow(hwnd);
     SetActiveWindow(hwnd);
@@ -502,9 +505,9 @@ int main(int argc, char* argv[]) {
     // get our uptime start
     QueryPerformanceCounter(&start_time);
     // init GPIOs
-    for(size_t i = 0; i < 256;++i) {
+    for (size_t i = 0; i < 256; ++i) {
         gpios[i].id = i;
-        gpios[i].mode = 0; // not set yet
+        gpios[i].mode = 0;  // not set yet
         gpios[i].interrupt_mode = -1;
         gpios[i].interrupt_cb = nullptr;
         gpios[i].hwnd_text = nullptr;
@@ -533,13 +536,13 @@ int main(int argc, char* argv[]) {
     wc.lpszClassName = L"Winduino_GPIO";
     RegisterClassW(&wc);
     HWND hwnd_dx;
-    RECT r = {0, 0, winduino_screen_size.width*2, winduino_screen_size.height - 1};
+    RECT r = {0, 0, winduino_screen_size.width * 2, winduino_screen_size.height - 1};
     // adjust the size of the window so
     // the above is our client rect
     AdjustWindowRectEx(&r, WS_CAPTION | WS_SYSMENU | WS_BORDER, FALSE, WS_EX_APPWINDOW);
-    r.bottom+=GetSystemMetrics(SM_CYMENU);
+    r.bottom += GetSystemMetrics(SM_CYMENU);
     menu = CreateMenu();
-    if(menu==NULL) {
+    if (menu == NULL) {
         goto exit;
     }
     // MENUINFO mi;
@@ -549,19 +552,19 @@ int main(int argc, char* argv[]) {
     // SetMenuInfo(menu,&mi);
 
     gpio_menu = CreateMenu();
-    if(gpio_menu==NULL) {
+    if (gpio_menu == NULL) {
         goto exit;
     }
-    
+
     MENUITEMINFOW mif;
     wchar_t wcsmenu[256];
-    wcscpy(wcsmenu,L"&GPIO");
+    wcscpy(wcsmenu, L"&GPIO");
     mif.cbSize = sizeof(MENUITEMINFOW);
-    mif.cch = wcslen(wcsmenu)+1;
+    mif.cch = wcslen(wcsmenu) + 1;
     mif.fMask = MIIM_STRING | MIIM_SUBMENU;
     mif.dwTypeData = wcsmenu;
     mif.hSubMenu = gpio_menu;
-    InsertMenuItemW(menu,0,TRUE,&mif);
+    InsertMenuItemW(menu, 0, TRUE, &mif);
     // create the main window
     hwnd_main = CreateWindowExW(
         WS_EX_APPWINDOW, L"Winduino", L"Winduino",
@@ -570,21 +573,21 @@ int main(int argc, char* argv[]) {
         r.right - r.left + 1,
         r.bottom - r.top + 1,
         NULL, menu, hInstance, NULL);
-    hwnd_dx=NULL; 
+    hwnd_dx = NULL;
     if (!IsWindow(hwnd_main)) goto exit;
     // create the DirectX window
-    hwnd_dx = CreateWindowW(L"Winduino_DX",L"",
+    hwnd_dx = CreateWindowW(L"Winduino_DX", L"",
                             WS_CHILDWINDOW | WS_VISIBLE,
-                            0,0,winduino_screen_size.width,winduino_screen_size.height,
-                            hwnd_main,NULL,
-                            hInstance,NULL);
+                            0, 0, winduino_screen_size.width, winduino_screen_size.height,
+                            hwnd_main, NULL,
+                            hInstance, NULL);
     if (!IsWindow(hwnd_dx)) goto exit;
     // create the log textbox
-    hwnd_log=CreateWindowExW(WS_EX_CLIENTEDGE, L"edit", L"",
-                              WS_CHILD | WS_VISIBLE |WS_HSCROLL | WS_VSCROLL | WS_TABSTOP | WS_BORDER | ES_LEFT| ES_MULTILINE ,
-                              winduino_screen_size.width+1, 0, (r.right+r.left)/2, winduino_screen_size.height,
-                              hwnd_main, (HMENU)(1),
-                              hInstance, NULL);
+    hwnd_log = CreateWindowExW(WS_EX_CLIENTEDGE, L"edit", L"",
+                               WS_CHILD | WS_VISIBLE | WS_HSCROLL | WS_VSCROLL | WS_TABSTOP | WS_BORDER | ES_LEFT | ES_MULTILINE,
+                               winduino_screen_size.width + 1, 0, (r.right + r.left) / 2, winduino_screen_size.height,
+                               hwnd_main, (HMENU)(1),
+                               hInstance, NULL);
     // for signalling when to exit
     quit_event = CreateEvent(
         NULL,              // default security attributes
@@ -621,16 +624,15 @@ int main(int argc, char* argv[]) {
     }
     // initialize the render bitmap
     {
-        
         D2D1_SIZE_U size = {0};
         D2D1_BITMAP_PROPERTIES props;
         render_target->GetDpi(&props.dpiX, &props.dpiY);
         D2D1_PIXEL_FORMAT pixelFormat = D2D1::PixelFormat(
-        #ifdef USE_RGB
+#ifdef USE_RGB
             DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
-        #else
+#else
             DXGI_FORMAT_B8G8R8A8_UNORM,
-        #endif
+#endif
             D2D1_ALPHA_MODE_IGNORE);
         props.pixelFormat = pixelFormat;
         size.width = winduino_screen_size.width;
@@ -649,8 +651,8 @@ int main(int argc, char* argv[]) {
     SetTimer(hwnd_main, 0, 1000, NULL);
     // run setup() to initialize user code
     setup();
-    
-    // this is the thread where the actual rendering 
+
+    // this is the thread where the actual rendering
     // takes place and where loop() is run
     app_thread = CreateThread(NULL, 8000 * 4, render_thread_proc, NULL, 0, NULL);
     if (app_thread == NULL) {
@@ -670,14 +672,14 @@ int main(int argc, char* argv[]) {
                 InterlockedExchange(&frames, 0);
             }
             // handle our out of band messages
-            if (msg.message == WM_LBUTTONDOWN && msg.hwnd==hwnd_dx) {
-                if(LOWORD(msg.lParam)<winduino_screen_size.width && 
-                    HIWORD(msg.lParam)<winduino_screen_size.height) {
+            if (msg.message == WM_LBUTTONDOWN && msg.hwnd == hwnd_dx) {
+                if (LOWORD(msg.lParam) < winduino_screen_size.width &&
+                    HIWORD(msg.lParam) < winduino_screen_size.height) {
                     SetCapture(hwnd_dx);
-                    
+
                     if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                            app_mutex,  // handle to mutex
-                                            INFINITE)) {   // no time-out interval)
+                                             app_mutex,    // handle to mutex
+                                             INFINITE)) {  // no time-out interval)
                         old_mouse_state = mouse_state;
                         mouse_state = 1;
                         mouse_loc.x = LOWORD(msg.lParam);
@@ -688,11 +690,11 @@ int main(int argc, char* argv[]) {
                     update_title(hwnd_main);
                 }
             }
-            if (msg.message == WM_MOUSEMOVE && 
-                msg.hwnd==hwnd_dx) {
+            if (msg.message == WM_MOUSEMOVE &&
+                msg.hwnd == hwnd_dx) {
                 if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                         app_mutex,  // handle to mutex
-                                         INFINITE)) {   // no time-out interval)
+                                         app_mutex,    // handle to mutex
+                                         INFINITE)) {  // no time-out interval)
                     if (mouse_state == 1 && MK_LBUTTON == msg.wParam) {
                         mouse_req = 1;
                         mouse_loc.x = (int16_t)LOWORD(msg.lParam);
@@ -703,11 +705,11 @@ int main(int argc, char* argv[]) {
                 update_title(hwnd_main);
             }
             if (msg.message == WM_LBUTTONUP &&
-                msg.hwnd==hwnd_dx) {
+                msg.hwnd == hwnd_dx) {
                 ReleaseCapture();
                 if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                         app_mutex,  // handle to mutex
-                                         INFINITE)) {   // no time-out interval)
+                                         app_mutex,    // handle to mutex
+                                         INFINITE)) {  // no time-out interval)
 
                     old_mouse_state = mouse_state;
                     mouse_req = 1;
@@ -718,9 +720,9 @@ int main(int argc, char* argv[]) {
                 }
                 update_title(hwnd_main);
             }
-             if(msg.message == WM_COMMAND && msg.hwnd==hwnd_main) {
+            if (msg.message == WM_COMMAND && msg.hwnd == hwnd_main) {
                 ensure_gpio_window((uint8_t)~msg.wParam);
-                //Serial.printf("selected %d\r\n",~msg.wParam);
+                // Serial.printf("selected %d\r\n",~msg.wParam);
             }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
@@ -757,40 +759,42 @@ void pinMode(uint8_t pin, uint8_t mode) {
 }
 void digitalWrite(uint8_t pin, uint8_t val) {
     gpio_t& g = gpios[pin];
-    if(g.mode == OUTPUT || g.mode == OUTPUT_OPEN_DRAIN) {
-        g.value(val==LOW?LOW:HIGH);
+    if (g.mode == OUTPUT || g.mode == OUTPUT_OPEN_DRAIN) {
+        g.value(val == LOW ? LOW : HIGH);
         update_gpios();
     }
 }
 int digitalRead(uint8_t pin) {
     gpio_t& g = gpios[pin];
-    if(g.mode == INPUT || g.mode == INPUT_PULLUP || g.mode == INPUT_PULLDOWN) {
-        return g.value() == LOW?LOW:HIGH;
+    if (g.mode == INPUT || g.mode == INPUT_PULLUP || g.mode == INPUT_PULLDOWN) {
+        return g.value() == LOW ? LOW : HIGH;
     }
     return LOW;
 }
 void analogWrite(uint8_t pin, int value) {
-    if(value<0) { value = 0; }
-    else if(value>255) {value = 255;}
+    if (value < 0) {
+        value = 0;
+    } else if (value > 255) {
+        value = 255;
+    }
     gpio_t& g = gpios[pin];
-    if(g.mode == OUTPUT || g.mode == OUTPUT_OPEN_DRAIN) {
+    if (g.mode == OUTPUT || g.mode == OUTPUT_OPEN_DRAIN) {
         g.value((uint32_t)value);
         update_gpios();
     }
 }
 uint16_t analogRead(uint8_t pin) {
     gpio_t& g = gpios[pin];
-    if(g.mode == INPUT || g.mode == INPUT_PULLUP || g.mode == INPUT_PULLDOWN) {
+    if (g.mode == INPUT || g.mode == INPUT_PULLUP || g.mode == INPUT_PULLDOWN) {
         return (uint16_t)g.value();
     }
     return 0;
 }
 void yield() {
-    
 }
 void attachInterrupt(uint8_t pin, void (*cb)(void), int mode) {
-    if(!gpios[pin].is_input()) {
-        pinMode(pin,INPUT);
+    if (!gpios[pin].is_input()) {
+        pinMode(pin, INPUT);
     }
     gpios[pin].interrupt_mode = mode;
     gpios[pin].interrupt_cb = cb;
@@ -802,80 +806,87 @@ void detachInterrupt(uint8_t pin) {
     update_gpios();
 }
 // note that this effective "leaks" since there's no way to free
-// it doesn't matter, because hardware cannot be reloaded or 
+// it doesn't matter, because hardware cannot be reloaded or
 // unloaded for the life of the process
 void* hardware_load(const char* name) {
     HMODULE h = LoadLibraryA(name);
-    if(h==NULL) {
+    if (h == NULL) {
         return nullptr;
     }
     hardware_handle_t* result = new hardware_handle_t();
-    if(result==nullptr) {
+    if (result == nullptr) {
         return nullptr;
     }
     result->next = nullptr;
     result->hmodule = h;
-    result->configure = (hardware_configure_fn)GetProcAddress(h,"Configure");
-    result->connect = (hardware_connect_fn)GetProcAddress(h,"Connect");
-    result->update = (hardware_update_fn)GetProcAddress(h,"Update");
-    result->pin_change = (hardware_pin_change_fn)GetProcAddress(h,"PinChange");
-    result->transfer_bits_spi = (hardware_transfer_bits_spi_fn)GetProcAddress(h,"TransferBitsSPI");
-    result->attach_log = (hardware_attach_log_fn)GetProcAddress(h,"AttachLog");
-    if(result->connect == nullptr) {
-        delete result;
-        return nullptr;
-    }
-    if(hardware_head == nullptr) {
+    result->configure = (hardware_configure_fn)GetProcAddress(h, "Configure");
+    result->connect = (hardware_connect_fn)GetProcAddress(h, "Connect");
+    result->update = (hardware_update_fn)GetProcAddress(h, "Update");
+    result->pin_change = (hardware_pin_change_fn)GetProcAddress(h, "PinChange");
+    result->transfer_bits_spi = (hardware_transfer_bits_spi_fn)GetProcAddress(h, "TransferBitsSPI");
+    result->transfer_bytes_i2c = (hardware_transfer_bytes_i2c_fn)GetProcAddress(h, "TransferBytesI2C");
+    result->attach_log = (hardware_attach_log_fn)GetProcAddress(h, "AttachLog");
+
+    if (hardware_head == nullptr) {
         hardware_head = result;
     } else {
         hardware_handle_t* p = hardware_head;
-        while(p!=nullptr) {
-            if(p->next==nullptr) {
+        while (p != nullptr) {
+            if (p->next == nullptr) {
                 p->next = result;
                 break;
             }
-            p=p->next;
+            p = p->next;
         }
     }
     return result;
 }
 bool hardware_set_pin(void* hw, uint8_t mcu_pin, uint8_t hw_pin) {
-    if(hw==nullptr) {
+    if (hw == nullptr) {
         return false;
     }
-    return gpios[mcu_pin].connect((hardware_handle_t*)hw,hw_pin);
-} 
+    return gpios[mcu_pin].connect((hardware_handle_t*)hw, hw_pin);
+}
 
 bool hardware_configure(void* hw, int prop, void* data, size_t size) {
-    if(hw==nullptr) {
+    if (hw == nullptr) {
         return false;
     }
     hardware_handle_t* h = (hardware_handle_t*)hw;
-    if(h->configure==nullptr) return false;
-    return 0==h->configure(prop,data,size);
+    if (h->configure == nullptr) return false;
+    return 0 == h->configure(prop, data, size);
 }
 bool hardware_transfer_bits_spi(uint8_t* data, size_t size_bits) {
     hardware_handle_t* h = hardware_head;
-    while(h!=nullptr) {
-        if(h->transfer_bits_spi!=nullptr) {
-            if(0!=h->transfer_bits_spi(data,size_bits)) {
-                return false;
-            }
+    while (h != nullptr) {
+        if (h->transfer_bits_spi != nullptr) {
+            h->transfer_bits_spi(data, size_bits);
         }
-        h=h->next;
+        h = h->next;
     }
     return true;
 }
+bool hardware_transfer_bytes_i2c(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size) {
+    hardware_handle_t* h = hardware_head;
+    while (h != nullptr) {
+        if (h->transfer_bytes_i2c != nullptr) {
+            h->transfer_bytes_i2c(in, in_size, out, in_out_out_size);
+        }
+        h = h->next;
+    }
+    return true;
+}
+
 static void logger_log(const char* text) {
     Serial.println(text);
 }
 bool hardware_attach_log(void* hw) {
-    if(hw==nullptr) {
+    if (hw == nullptr) {
         return false;
     }
     hardware_handle_t* h = (hardware_handle_t*)hw;
-    if(h->attach_log!=nullptr) {
+    if (h->attach_log != nullptr) {
         h->attach_log(logger_log);
     }
-    return true;    
+    return true;
 }

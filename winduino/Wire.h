@@ -27,7 +27,8 @@
 #define TwoWire_h
 
 #include "Stream.h"
-
+#define SCL 21
+#define SDA 22
 // WIRE_HAS_BUFFER_SIZE means Wire has setBufferSize()
 #define WIRE_HAS_BUFFER_SIZE    1
 // WIRE_HAS_END means Wire has end() 
@@ -45,7 +46,7 @@ protected:
     uint8_t num;
     int8_t sda;
     int8_t scl;
-
+    uint32_t _frequency;
     size_t bufferSize;
     uint8_t *rxBuffer;
     size_t rxIndex;
@@ -62,8 +63,6 @@ private:
     bool is_slave;
     void (*user_onRequest)(void);
     void (*user_onReceive)(int);
-    static void onRequestService(uint8_t, void *);
-    static void onReceiveService(uint8_t, uint8_t*, size_t, bool, void *);
     bool initPins(int sdaPin, int sclPin);
     bool allocateWireBuffer(void);
     void freeWireBuffer(void);
@@ -145,9 +144,6 @@ public:
         return write((uint8_t)n);
     }
 
-    void onReceive( void (*)(int) );
-    void onRequest( void (*)(void) );
-    size_t slaveWrite(const uint8_t *, size_t);
 };
 
 extern TwoWire Wire;

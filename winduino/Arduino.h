@@ -177,6 +177,7 @@ void* hardware_load(const char* name);
 bool hardware_set_pin(void* hw, uint8_t mcu_pin, uint8_t hw_pin);
 bool hardware_configure(void* hw, int prop, void* data, size_t size);
 bool hardware_transfer_bits_spi(uint8_t* data, size_t size_bits);
+bool hardware_transfer_bytes_i2c(const uint8_t*in, size_t in_size, uint8_t* out,size_t* in_out_out_size);
 bool hardware_attach_log(void* hw);
 #include <algorithm>
 #include <cmath>

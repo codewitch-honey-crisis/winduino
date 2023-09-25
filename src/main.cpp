@@ -8,13 +8,14 @@
 #include "spi_screen.h"
 #include <tft_io.hpp>
 #include <st7789.hpp>
-
+#include <ft6236.hpp>
 using namespace gfx;
 using namespace uix;
 using namespace arduino;
 
 using bus_t = tft_spi<0,5>;
 using lcd_t = st7789<135,240,2,4,-1,bus_t,1>;
+using touch_t = ft6236<135,240>;
 // creates a BGRx pixel by making each channel 
 // one quarter of the whole. Any remainder bits
 // are added to the green channel. One channel
@@ -112,6 +113,7 @@ using color2_t = color<typename lcd_t::pixel_type>;
 using color32_t = color<rgba_pixel<32>>;
 
 lcd_t lcd2;
+touch_t touch2;
 // UIX allows you to use two buffers for maximum DMA efficiency
 // you don't have to, but performance is significantly better
 // declare 64KB across two buffers for transfer
@@ -605,7 +607,9 @@ void setup() {
     hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
     hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
 lcd2.initialize();
-
+if(touch2.initialize()==false) {
+    Serial.println("Could not find FT6236");
+}
 open_text_info oti;
 oti.font = &text_font;
 oti.scale = oti.font->scale(50);
@@ -770,6 +774,12 @@ void loop() {
         fps_index = 0;
         showed_summary = false;
     }
-
+    if(touch2.update()) {
+        if(touch2.touches()) {
+            uint16_t x,y;
+            touch2.xy(&x,&y);
+            Serial.printf("Touch: (%d,%d)\r\n",x,y);
+        }
+    }
     anim_screen.update();
 }
