@@ -19,8 +19,11 @@ add_library(winduino
                 winduino/FS.cpp
                 winduino/SD.cpp
                 winduino/SPI.cpp)
-
 target_link_libraries(winduino ${DXLIBS} )
+target_include_directories(winduino PUBLIC
+    "${PROJECT_SOURCE_DIR}"    
+    "${PROJECT_BINARY_DIR}"
+)
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 
@@ -53,6 +56,7 @@ add_library(htcw_gfx lib/htcw_gfx/src/gfx_drawing.cpp
                     lib/htcw_gfx/src/miniz.c
                     lib/htcw_gfx/src/pngle.c
 )
+target_link_libraries(htcw_gfx htcw_io)
 target_include_directories(htcw_gfx PUBLIC
 "${PROJECT_SOURCE_DIR}/lib/htcw_bits/include"
 "${PROJECT_SOURCE_DIR}/lib/htcw_data/include"
@@ -64,18 +68,11 @@ target_include_directories(htcw_gfx PUBLIC
 add_executable(example 
     src/main.cpp
 )
-target_link_libraries(example winduino htcw_io htcw_gfx)
+target_link_libraries(example winduino htcw_gfx)
 target_include_directories(example PUBLIC
     "${PROJECT_SOURCE_DIR}"
     "${PROJECT_SOURCE_DIR}/winduino"
-
-    "${PROJECT_SOURCE_DIR}/lib/htcw_bits/include"
-    "${PROJECT_SOURCE_DIR}/lib/htcw_io/include"
-    "${PROJECT_SOURCE_DIR}/lib/htcw_data/include"
-    "${PROJECT_SOURCE_DIR}/lib/htcw_ml/include"
-    "${PROJECT_SOURCE_DIR}/lib/htcw_gfx/include"
     "${PROJECT_SOURCE_DIR}/lib/htcw_uix/include"
-
     "${PROJECT_SOURCE_DIR}/lib/htcw_tft_io/include"
     "${PROJECT_SOURCE_DIR}/lib/htcw_st7789/include"
 
