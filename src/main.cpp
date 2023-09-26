@@ -750,6 +750,7 @@ void loop() {
 void winduino() {
     // so we can log
     Serial.begin(115200);
+
     // load the SPI screen
     void* hw_screen = hardware_load(LIB_SPI_SCREEN);
     if(hw_screen==nullptr) {
@@ -782,19 +783,23 @@ void winduino() {
     hardware_attach_spi(hw_screen,0);
     // attach the I2C bus (for touch)
     hardware_attach_i2c(hw_screen,0);
+    
     // finally we can initialize 
     // the screen and touch
     if(!lcd2.initialize()) {
         Serial.println("Could not find the ST7789");
     }
+
     if(touch2.initialize()==false) {
         Serial.println("Could not find FT6236");
     }
+    
     // draw our screen
     open_text_info oti;
     oti.font = &text_font;
     oti.scale = oti.font->scale(50);
     oti.text = "Hello world!";
+    
     // reading SPI displays is slow so we don't. In fact, bitmaps are really the best way to draw
     auto bmp = create_bitmap_from(lcd2,{screen_size.width,screen_size.height});
     if(bmp.begin()) {
