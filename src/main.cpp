@@ -577,9 +577,13 @@ static void screen_init() {
 }
 void setup() {
     Serial.begin(115200);
-
+    // make some virtual GPIOs
     pinMode(17,OUTPUT);
     digitalWrite(17,HIGH);
+    // attach an interrupt to 18
+    // so when we put a new value
+    // in winduino it causes
+    // an interrupt
     attachInterrupt(18,[]() {
         Serial.println("Rise!");
     }, RISING);
@@ -621,6 +625,7 @@ void loop() {
         }
         frames = 0;
         ++seconds;
+        // toggle every second
         digitalWrite(17,toggle?HIGH:LOW);
         toggle=!toggle;
         
@@ -728,6 +733,8 @@ void loop() {
         fps_index = 0;
         showed_summary = false;
     }
+#ifdef WINDUINO
+    // finger paint 
     if(touch2.update()) {
         if(touch2.touches()) {
             uint16_t x,y;
@@ -735,42 +742,55 @@ void loop() {
             draw::filled_ellipse(lcd2,rect16(point16(x,y),5),color2_t::purple);
         }
     }
+#endif
     anim_screen.update();
 }
 // the following code only runs when executed in Winduino
 #ifdef WINDUINO
 void winduino() {
+    // so we can log
     Serial.begin(115200);
+    // load the SPI screen
     void* hw_screen = hardware_load(LIB_SPI_SCREEN);
     if(hw_screen==nullptr) {
         Serial.println("Unable to load external SPI screen");
     }
-
+    // attach the log (log all messages, including debug)
+    hardware_attach_log(hw_screen,"[scr]",255);
+    // set the resolution
     struct {
         uint16_t width;
         uint16_t height;
     } screen_size = {240,135};
+    if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
+        Serial.println("Unable to configure hardware");
+    }
+    // set the panel offsets
     struct {
         int16_t x;
         int16_t y;
     } screen_offsets = {40,53};
-    hardware_attach_log(hw_screen,"[scr]",255);
-    if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
-        Serial.println("Unable to configure hardware");
-    }
     if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_OFFSETS,&screen_offsets,sizeof(screen_offsets))) {
         Serial.println("Unable to configure hardware");
     }
+    // set the screen GPIOs (aside from SPI which are fixed and virtual)
     hardware_set_pin(hw_screen,15, SPI_SCREEN_PIN_BKL);    
     hardware_set_pin(hw_screen,5, SPI_SCREEN_PIN_CS);
     hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
     hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
+    // attach the SPI bus (for the screen)
     hardware_attach_spi(hw_screen,0);
+    // attach the I2C bus (for touch)
     hardware_attach_i2c(hw_screen,0);
-    lcd2.initialize();
+    // finally we can initialize 
+    // the screen and touch
+    if(!lcd2.initialize()) {
+        Serial.println("Could not find the ST7789");
+    }
     if(touch2.initialize()==false) {
         Serial.println("Could not find FT6236");
     }
+    // draw our screen
     open_text_info oti;
     oti.font = &text_font;
     oti.scale = oti.font->scale(50);
@@ -783,7 +803,5 @@ void winduino() {
         draw::bitmap(lcd2,lcd2.bounds(),bmp,bmp.bounds());
         free(bmp.begin());
     }
-        //lcd2.fill({0,0,49,49},color2_t::red);
-
 }
 #endif
