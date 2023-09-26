@@ -745,6 +745,7 @@ void winduino() {
     if(hw_screen==nullptr) {
         Serial.println("Unable to load external SPI screen");
     }
+
     struct {
         uint16_t width;
         uint16_t height;

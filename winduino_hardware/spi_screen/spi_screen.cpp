@@ -18,128 +18,46 @@
 
 #pragma comment(lib, "d2d1.lib")
 
-static const uint8_t TFT_CASET = 0x2A;
-static const uint8_t TFT_PASET = 0x2B;
-static const uint8_t TFT_RAMWR = 0x2C;
-static const uint8_t TFT_RAMRD = 0x2E;
-
-constexpr static const uint8_t TOUCH_REG_MODE = 0x00;
-constexpr static const uint8_t TOUCH_REG_XL = 0x04;
-constexpr static const uint8_t TOUCH_REG_XH = 0x03;
-constexpr static const uint8_t TOUCH_REG_YL = 0x06;
-constexpr static const uint8_t TOUCH_REG_YH = 0x05;
-constexpr static const uint8_t TOUCH_REG_NUMTOUCHES = 0x2;
-constexpr static const uint8_t TOUCH_REG_THRESHHOLD = 0x80;
-constexpr static const uint8_t TOUCH_REG_VENDID = 0xA8;
-constexpr static const uint8_t TOUCH_REG_CHIPID = 0xA3;
-constexpr static const uint8_t FT6236_VENDID = 0x11;
-constexpr static const uint8_t FT6206_CHIPID = 0x6;
-constexpr static const uint8_t FT6236_CHIPID = 0x36;
-constexpr static const uint8_t FT6236U_CHIPID = 0x64;
-
-static struct {
-    uint16_t width;
-    uint16_t height;
-} screen_size = {320, 240};
-static struct {
-    int16_t x;
-    int16_t y;
-} screen_offsets = {0, 0};
-
-typedef struct input {
-    void* read_state;
-    bool has_cached_value;
-    uint8_t cached_value;
-    gpio_get_callback read;
-    void (*on_change_callback)(void* state);
-    void* on_change_callback_state;
-    input() : read_state(nullptr), has_cached_value(false), cached_value(false), read(nullptr), on_change_callback(nullptr), on_change_callback_state(nullptr) {
-    }
-    void on_changed(uint8_t value) {
-        has_cached_value = true;
-        cached_value = value;
-        if (on_change_callback != nullptr) {
-            on_change_callback(on_change_callback_state);
-        }
-    }
-    uint8_t value() const {
-        if (!has_cached_value) {
-            if (read == nullptr) {
-                return 0;
-            }
-            return read(read_state);
-        }
-        return cached_value;
-    }
-} input_t;
-
-typedef enum screen_states {
-    SCREEN_STATE_INITIAL = 0,
-    SCREEN_STATE_IGNORING,
-    SCREEN_STATE_COLSET1,
-    SCREEN_STATE_COLSET2,
-    SCREEN_STATE_ROWSET1,
-    SCREEN_STATE_ROWSET2,
-    SCREEN_STATE_WRITE,
-    SCREEN_STATE_READ1,
-    SCREEN_STATE_READ2
-} screen_states_t;
-typedef enum touch_states {
-    TOUCH_STATE_INITIAL = 0,
-    TOUCH_STATE_IGNORING,
-    TOUCH_STATE_ADDRESS,
-    TOUCH_STATE_READ,
-    TOUCH_STATE_WRITE
-} touch_states_t;
-
-static screen_states_t screen_st = SCREEN_STATE_INITIAL;
-static uint8_t touch_address = 0x38;
-static bool touch_factory_mode = false;
-static int touch_current_reg = -1;
-static uint8_t touch_threshhold = 0x80;
-static bool bkl_low = false;
-static uint8_t colset = TFT_CASET;
-static uint8_t rowset = TFT_PASET;
-static uint8_t write = TFT_RAMWR;
-static uint8_t read = TFT_RAMRD;
-static uint16_t col_start = 0, col_end = 0, row_start = 0, row_end = 0;
-static int cmd = -1;
-static uint8_t in_byte = 0;
-static int bit_count = 0;
-static input_t cs;
-static input_t dc;
-static input_t rst;
-static input_t bkl;
-static uint8_t* frame_buffer;
-static uint32_t data_word = 0;
-static size_t bytes_written = 0, bytes_read = 0;
-static uint16_t column = 0, row = 0;
-static int offset = 0;
-static bool can_configure = true;
-static HANDLE render_mutex = NULL;
-static HANDLE render_thread = NULL;
-static HANDLE quit_event = NULL;
-static int reset_state = false;
-static HANDLE screen_ready = NULL;
-static HANDLE touch_mutex = NULL;
-static log_callback logger = NULL;
 static HMODULE hInstance = NULL;
-static bool in_pixel_transfer = false;
-static volatile DWORD render_changed = 1;
-
-// mouse mess
-static struct { int x; int y; } mouse_loc;
-static int mouse_state = 0;  // 0 = released, 1 = pressed
-static int old_mouse_state = 0;
-static int mouse_req = 0;
-// directX stuff
-static ID2D1HwndRenderTarget* render_target = nullptr;
-static ID2D1Factory* d2d_factory = nullptr;
-static ID2D1Bitmap* render_bitmap = nullptr;
-
-HWND hwnd_screen = nullptr;
-static bool created_wndcls = false;
-static void logfmt(const char* format, ...) {
+void spi_screen::initialize() {
+    screen_size= {320, 240};
+    screen_offsets= {0,0};
+    screen_st = SCREEN_STATE_INITIAL;
+    touch_address = 0x38;
+    touch_factory_mode = false;
+    touch_current_reg = -1;
+    touch_threshhold = 0x80;
+    bkl_low = false;
+    colset= TFT_CASET;
+    rowset= TFT_PASET;
+    write= TFT_RAMWR;
+    read = TFT_RAMRD;
+    col_start=0;
+    col_end=0;
+    row_start=0;
+    row_end=0;
+    int cmd= -1;
+    uint8_t in_byte = 0;
+    int bit_count = 0;
+    frame_buffer=NULL;
+    data_word = 0;
+    bytes_written=0;
+    bytes_read=0;
+    column=0;
+    row=0;
+    offset=0;
+    can_configure = true;
+    render_mutex = NULL;
+    render_thread= NULL;
+    quit_event= NULL;
+    reset_state = false;
+    screen_ready = NULL;
+    touch_mutex = NULL;
+    logger = NULL;
+    in_pixel_transfer = false;
+    render_changed = 1;
+}
+void spi_screen::logfmt(const char* format, ...) {
     if (logger == nullptr) {
         return;
     }
@@ -171,7 +89,7 @@ static void logfmt(const char* format, ...) {
     return;
 }
 // updates the window title with the FPS and any mouse info
-static void update_title(HWND hwnd) {
+void spi_screen::update_title(HWND hwnd) {
     wchar_t wsztitle[64];
     uint16_t f;
     wcscpy(wsztitle, L"SPI Screen");
@@ -190,32 +108,35 @@ static void update_title(HWND hwnd) {
     }
     
 }
-static LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-    if (uMsg == WM_CLOSE) {
-        SetEvent(quit_event);
+LRESULT spi_screen::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    spi_screen* st =  (spi_screen*)GetWindowLongPtrW(hWnd,GWLP_USERDATA);
+    if(st!=NULL) {
+        if (uMsg == WM_CLOSE) {
+            SetEvent(st->quit_event);
+        }
     }
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
 
-static DWORD render_thread_proc(void* state);
-static DWORD window_thread_proc(void* state) {
+DWORD spi_screen::window_thread_proc(void* state) {
+    spi_screen* st = (spi_screen*)state;
     HRESULT hr;
-    ResetEvent(screen_ready);
+    ResetEvent(st->screen_ready);
 
-    if (frame_buffer == nullptr) {
-        frame_buffer = (uint8_t*)malloc(4 * screen_size.width * screen_size.height);
-        if (frame_buffer == nullptr) {
+    if (st->frame_buffer == nullptr) {
+        st->frame_buffer = (uint8_t*)malloc(4 * st->screen_size.width * st->screen_size.height);
+        if (st->frame_buffer == nullptr) {
             return 1;
         }
     }
-    if(touch_mutex==nullptr) {
-        touch_mutex = CreateMutex(NULL, FALSE, NULL);
-        if(touch_mutex==NULL) {
+    if(st->touch_mutex==nullptr) {
+        st->touch_mutex = CreateMutex(NULL, FALSE, NULL);
+        if(st->touch_mutex==NULL) {
             return 1;
         }
     }
-    if (render_mutex == nullptr) {
-        if (!created_wndcls) {
+    if (st->render_mutex == nullptr) {
+        if (!st->created_wndcls) {
             WNDCLASSW wc;
             wc.style = CS_HREDRAW | CS_VREDRAW;
             wc.lpfnWndProc = WindowProc;
@@ -228,84 +149,85 @@ static DWORD window_thread_proc(void* state) {
             wc.hCursor = LoadCursor(NULL, IDC_ARROW);
             wc.lpszClassName = L"spi_screen";
             RegisterClassW(&wc);
-            created_wndcls = true;
+            st->created_wndcls = true;
         }
-        if (quit_event == NULL) {
+        if (st->quit_event == NULL) {
             // for signalling when to exit
-            quit_event = CreateEventW(
+            st->quit_event = CreateEventW(
                 NULL,         // default security attributes
                 TRUE,         // manual-reset event
                 FALSE,        // initial state is nonsignaled
                 L"QuitEvent"  // object name
             );
-            if (quit_event == NULL) {
+            if (st->quit_event == NULL) {
                 return 1;
             }
         }
-        if (d2d_factory == nullptr) {
+        if (st->d2d_factory == nullptr) {
             // start DirectX
-            hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &d2d_factory);
+            hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &st->d2d_factory);
             if (!SUCCEEDED(hr)) {
                 return 1;
             }
         }
-        RECT r = {0, 0, screen_size.width, screen_size.height};
+        RECT r = {0, 0, st->screen_size.width, st->screen_size.height};
         AdjustWindowRectEx(&r, WS_CAPTION | WS_BORDER, FALSE, WS_EX_TOOLWINDOW);
-        hwnd_screen = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_APPWINDOW, L"spi_screen", L"SPI Screen", WS_CAPTION | WS_BORDER, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, NULL, NULL, /* GetModuleHandleW(NULL)*/ hInstance, NULL);
-        if (hwnd_screen == nullptr) {
+        st->hwnd_screen = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_APPWINDOW, L"spi_screen", L"SPI Screen", WS_CAPTION | WS_BORDER, CW_USEDEFAULT, CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, NULL, NULL, /* GetModuleHandleW(NULL)*/ hInstance, NULL);
+        if (st->hwnd_screen == nullptr) {
             return 1;
         }
-        if (render_target == nullptr) {
+        SetWindowLongPtrW(st->hwnd_screen,GWLP_USERDATA,(LONG_PTR)st);
+        if (st->render_target == nullptr) {
             RECT rc;
-            GetClientRect(hwnd_screen, &rc);
+            GetClientRect(st->hwnd_screen, &rc);
             D2D1_SIZE_U size = D2D1::SizeU(
                 (rc.right - rc.left),
                 rc.bottom - rc.top);
 
-            hr = d2d_factory->CreateHwndRenderTarget(
+            hr = st->d2d_factory->CreateHwndRenderTarget(
                 D2D1::RenderTargetProperties(),
-                D2D1::HwndRenderTargetProperties(hwnd_screen, size),
-                &render_target);
+                D2D1::HwndRenderTargetProperties(st->hwnd_screen, size),
+                &st->render_target);
 
             if (!SUCCEEDED(hr)) {
                 return 1;
             }
         }
-        if (render_bitmap == nullptr) {
+        if (st->render_bitmap == nullptr) {
             // initialize the render bitmap
             D2D1_SIZE_U size = {0};
             D2D1_BITMAP_PROPERTIES props;
-            render_target->GetDpi(&props.dpiX, &props.dpiY);
+            st->render_target->GetDpi(&props.dpiX, &props.dpiY);
             D2D1_PIXEL_FORMAT pixelFormat = D2D1::PixelFormat(
                 DXGI_FORMAT_B8G8R8A8_UNORM,
                 D2D1_ALPHA_MODE_IGNORE);
             props.pixelFormat = pixelFormat;
-            size.width = screen_size.width;
-            size.height = screen_size.height;
+            size.width = st->screen_size.width;
+            size.height = st->screen_size.height;
 
-            hr = render_target->CreateBitmap(size,
+            hr = st->render_target->CreateBitmap(size,
                                              props,
-                                             &render_bitmap);
+                                             &st->render_bitmap);
             if (!SUCCEEDED(hr)) {
                 return 1;
             }
         }
-        if (render_mutex == NULL) {
-            render_mutex = CreateMutexW(NULL, FALSE, NULL);
-            if (render_mutex == NULL) {
+        if (st->render_mutex == NULL) {
+            st->render_mutex = CreateMutexW(NULL, FALSE, NULL);
+            if (st->render_mutex == NULL) {
                 return 1;
             }
         }
-        if (render_thread == NULL) {
-            render_thread = CreateThread(NULL, 4000, render_thread_proc, NULL, 0, NULL);
-            if (render_thread == NULL) {
+        if (st->render_thread == NULL) {
+            st->render_thread = CreateThread(NULL, 4000, render_thread_proc,st, 0, NULL);
+            if (st->render_thread == NULL) {
                 return 1;
             }
         }
-        ShowWindow(hwnd_screen, SW_SHOW);
-        UpdateWindow(hwnd_screen);
+        ShowWindow(st->hwnd_screen, SW_SHOW);
+        UpdateWindow(st->hwnd_screen);
     }
-    SetEvent(screen_ready);
+    SetEvent(st->screen_ready);
     bool quit = false;
     while (!quit) {
         DWORD result = 0;
@@ -318,98 +240,100 @@ static DWORD window_thread_proc(void* state) {
             // handle out of band
             // window messages here
             if (msg.message == WM_LBUTTONDOWN) {
-                if(LOWORD(msg.lParam)<screen_size.width && 
-                    HIWORD(msg.lParam)<screen_size.height) {
+                if(LOWORD(msg.lParam)<st->screen_size.width && 
+                    HIWORD(msg.lParam)<st->screen_size.height) {
                     SetCapture(msg.hwnd);
                     
                     if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                            touch_mutex,  // handle to mutex
+                                            st->touch_mutex,  // handle to mutex
                                             INFINITE)) {   // no time-out interval)
-                        old_mouse_state = mouse_state;
-                        mouse_state = 1;
-                        mouse_loc.x = LOWORD(msg.lParam);
-                        if(mouse_loc.x<0 || (mouse_loc.x & 0x8000)) mouse_loc.x=0;
-                        if(mouse_loc.x>=screen_size.width) mouse_loc.x = screen_size.width-1;
-                        mouse_loc.y = HIWORD(msg.lParam);
-                        if(mouse_loc.y<0 || (mouse_loc.y & 0x8000)) mouse_loc.y=0;
-                        if(mouse_loc.y>=screen_size.height) mouse_loc.y = screen_size.height-1;
-                        mouse_req = 1;
-                        ReleaseMutex(touch_mutex);
+                        st->old_mouse_state = st->mouse_state;
+                        st->mouse_state = 1;
+                        st->mouse_loc.x = LOWORD(msg.lParam);
+                        if(st->mouse_loc.x<0 || (st->mouse_loc.x & 0x8000)) st->mouse_loc.x=0;
+                        if(st->mouse_loc.x>=st->screen_size.width) st->mouse_loc.x = st->screen_size.width-1;
+                        st->mouse_loc.y = HIWORD(msg.lParam);
+                        if(st->mouse_loc.y<0 || (st->mouse_loc.y & 0x8000)) st->mouse_loc.y=0;
+                        if(st->mouse_loc.y>=st->screen_size.height) st->mouse_loc.y = st->screen_size.height-1;
+                        st->mouse_req = 1;
+                        ReleaseMutex(st->touch_mutex);
                     }
-                    update_title(msg.hwnd);
+                    st->update_title(msg.hwnd);
                 }
             }
             if (msg.message == WM_MOUSEMOVE) {
                 if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                         touch_mutex,  // handle to mutex
+                                         st->touch_mutex,  // handle to mutex
                                          INFINITE)) {   // no time-out interval)
-                    if (mouse_state == 1 && MK_LBUTTON == msg.wParam) {
-                        mouse_req = 1;
-                        mouse_loc.x = LOWORD(msg.lParam);
-                        if(mouse_loc.x<0 || (mouse_loc.x & 0x8000)) mouse_loc.x=0;
-                        if(mouse_loc.x>=screen_size.width) mouse_loc.x = screen_size.width-1;
-                        mouse_loc.y = HIWORD(msg.lParam);
-                        if(mouse_loc.y<0 || (mouse_loc.y & 0x8000)) mouse_loc.y=0;
-                        if(mouse_loc.y>=screen_size.height) mouse_loc.y = screen_size.height-1;
+                    if (st->mouse_state == 1 && MK_LBUTTON == msg.wParam) {
+                        st->mouse_req = 1;
+                        st->mouse_loc.x = LOWORD(msg.lParam);
+                        if(st->mouse_loc.x<0 || (st->mouse_loc.x & 0x8000)) st->mouse_loc.x=0;
+                        if(st->mouse_loc.x>=st->screen_size.width) st->mouse_loc.x = st->screen_size.width-1;
+                        st->mouse_loc.y = HIWORD(msg.lParam);
+                        if(st->mouse_loc.y<0 || (st->mouse_loc.y & 0x8000)) st->mouse_loc.y=0;
+                        if(st->mouse_loc.y>=st->screen_size.height) st->mouse_loc.y = st->screen_size.height-1;
                     }
-                    ReleaseMutex(touch_mutex);
+                    ReleaseMutex(st->touch_mutex);
                 }
-                update_title(msg.hwnd);
+                st->update_title(msg.hwnd);
             }
             if (msg.message == WM_LBUTTONUP) {
                 ReleaseCapture();
                 if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                         touch_mutex,  // handle to mutex
+                                         st->touch_mutex,  // handle to mutex
                                          INFINITE)) {   // no time-out interval)
 
-                    old_mouse_state = mouse_state;
-                    mouse_req = 1;
-                    mouse_state = 0;
-                    mouse_loc.x = LOWORD(msg.lParam);
-                    if(mouse_loc.x<0 || (mouse_loc.x & 0x8000)) mouse_loc.x=0;
-                    if(mouse_loc.x>=screen_size.width) mouse_loc.x = screen_size.width-1;
-                    mouse_loc.y = HIWORD(msg.lParam);
-                    if(mouse_loc.y<0 || (mouse_loc.y & 0x8000)) mouse_loc.y=0;
-                    if(mouse_loc.y>=screen_size.height) mouse_loc.y = screen_size.height-1;
-                    ReleaseMutex(touch_mutex);
+                    st->old_mouse_state = st->mouse_state;
+                    st->mouse_req = 1;
+                    st->mouse_state = 0;
+                    st->mouse_loc.x = LOWORD(msg.lParam);
+                    if(st->mouse_loc.x<0 || (st->mouse_loc.x & 0x8000)) st->mouse_loc.x=0;
+                    if(st->mouse_loc.x>=st->screen_size.width) st->mouse_loc.x = st->screen_size.width-1;
+                    st->mouse_loc.y = HIWORD(msg.lParam);
+                    if(st->mouse_loc.y<0 || (st->mouse_loc.y & 0x8000)) st->mouse_loc.y=0;
+                    if(st->mouse_loc.y>=st->screen_size.height) st->mouse_loc.y = st->screen_size.height-1;
+                    ReleaseMutex(st->touch_mutex);
                 }
-                update_title(msg.hwnd);
+                st->update_title(msg.hwnd);
             }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
-        if (WAIT_OBJECT_0 == WaitForSingleObject(quit_event, 0)) {
+        if (WAIT_OBJECT_0 == WaitForSingleObject(st->quit_event, 0)) {
             quit = true;
         }
     }
-    ResetEvent(screen_ready);
-    if (quit_event != NULL) {
-        SetEvent(quit_event);
+    ResetEvent(st->screen_ready);
+    if (st->quit_event != NULL) {
+        SetEvent(st->quit_event);
     }
-    if (render_thread != NULL) {
-        CloseHandle(render_thread);
+    if (st->render_thread != NULL) {
+        CloseHandle(st->render_thread);
     }
-    if (render_bitmap != nullptr) {
-        render_bitmap->Release();
-        render_bitmap = nullptr;
+    if (st->render_bitmap != nullptr) {
+        st->render_bitmap->Release();
+        st->render_bitmap = nullptr;
     }
-    if (render_target != nullptr) {
-        render_target->Release();
-        render_target = nullptr;
+    if (st->render_target != nullptr) {
+        st->render_target->Release();
+        st->render_target = nullptr;
     }
-    if (hwnd_screen != NULL) {
-        DestroyWindow(hwnd_screen);
-        hwnd_screen = NULL;
+    if (st->hwnd_screen != NULL) {
+        DestroyWindow(st->hwnd_screen);
+        st->hwnd_screen = NULL;
     }
-    if (render_mutex != NULL) {
-        CloseHandle(render_mutex);
+    if (st->render_mutex != NULL) {
+        CloseHandle(st->render_mutex);
+        st->render_mutex = NULL;
     }
-    if (quit_event != NULL) {
-        CloseHandle(quit_event);
+    if (st->quit_event != NULL) {
+        CloseHandle(st->quit_event);
+        st->quit_event = NULL;
     }
     return 0;
 }
-static uint8_t process_byte_spi(uint8_t val) {
+uint8_t spi_screen::process_byte_spi(uint8_t val) {
     if (can_configure) return val;
     if (dc.value()) {
         if (screen_st == SCREEN_STATE_INITIAL) {
@@ -632,63 +556,69 @@ static uint8_t process_byte_spi(uint8_t val) {
     }
     return val;
 }
-static DWORD render_thread_proc(void* state) {
+DWORD spi_screen::render_thread_proc(void* state) {
+    spi_screen* st = (spi_screen*)state;
     bool quit = false;
     while (!quit) {
-        if (0 != render_changed && frame_buffer && render_target && render_bitmap) {
+        if (0 != st->render_changed && st->frame_buffer && st->render_target && st->render_bitmap) {
             if (WAIT_OBJECT_0 == WaitForSingleObject(
-                                     render_mutex,  // handle to mutex
+                                     st->render_mutex,  // handle to mutex
                                      INFINITE)) {   // no time-out interval)
-                render_bitmap->CopyFromMemory(NULL, frame_buffer, 4 * screen_size.width);
-                render_target->BeginDraw();
+                st->render_bitmap->CopyFromMemory(NULL, st->frame_buffer, 4 * st->screen_size.width);
+                st->render_target->BeginDraw();
                 D2D1_RECT_F rect_dest = {
                     0,
                     0,
-                    (float)screen_size.width,
-                    (float)screen_size.height};
-                render_target->DrawBitmap(render_bitmap,
+                    (float)st->screen_size.width,
+                    (float)st->screen_size.height};
+                st->render_target->DrawBitmap(st->render_bitmap,
                                           rect_dest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR, NULL);
-                render_target->EndDraw();
-                ReleaseMutex(render_mutex);
-                InterlockedExchange(&render_changed, 0);
+                st->render_target->EndDraw();
+                ReleaseMutex(st->render_mutex);
+                InterlockedExchange(&st->render_changed, 0);
             }
         }
-        if (WAIT_OBJECT_0 == WaitForSingleObject(quit_event, 0)) {
+        if (WAIT_OBJECT_0 == WaitForSingleObject(st->quit_event, 0)) {
             quit = true;
         }
     }
     return 0;
 }
-static void on_rst_changed(void* state) {
-    if (reset_state == 2 && !rst.value()) {
-        reset_state = 0;
-        if (quit_event != NULL) {
-            SetEvent(quit_event);
+void spi_screen::on_rst_changed(void* state) {
+    spi_screen* st = (spi_screen*)state;
+    if (st->reset_state == 2 && !st->rst.value()) {
+        st->reset_state = 0;
+        if (st->quit_event != NULL) {
+            SetEvent(st->quit_event);
         }
     }
-    if (rst.value()) {
-        ++reset_state;
+    if (st->rst.value()) {
+        ++st->reset_state;
     }
-    if (reset_state == 2) {
+    if (st->reset_state == 2) {
         HRESULT hr;
-        if (screen_ready == NULL) {
-            screen_ready = CreateEventW(
+        if (st->screen_ready == NULL) {
+            st->screen_ready = CreateEventW(
                 NULL,           // default security attributes
                 TRUE,           // manual-reset event
                 FALSE,          // initial state is nonsignaled
-                L"ScreenReady"  // object name
+                NULL  // object name
             );
-            if (screen_ready == NULL) {
-                logfmt("unable to create screen_ready handle");
+            if (st->screen_ready == NULL) {
+                st->logfmt("unable to create screen_ready handle");
             }
         }
-        if (quit_event == NULL) {
-            CreateThread(NULL, 4000, window_thread_proc, NULL, 0, NULL);
+        if (st->quit_event == NULL) {
+            CreateThread(NULL, 4000, window_thread_proc, st, 0, NULL);
         }
     }
 }
-int CALL Configure(int prop, void* data, size_t size) {
+int CALL spi_screen::CanConfigure() {
+    return 1;
+}
+int CALL spi_screen::Configure(int prop, void* data, size_t size) {
     if (!can_configure) {
+        logfmt("Invalid state for configuration");
         return 2;
     }
     switch (prop) {
@@ -696,7 +626,7 @@ int CALL Configure(int prop, void* data, size_t size) {
             if (size == sizeof(screen_size)) {
                 memcpy(&screen_size, data, size);
                 return 0;
-            }
+            } 
             break;
         case SPI_SCREEN_PROP_BKL_LOW:
             if (size = sizeof(int)) {
@@ -738,9 +668,13 @@ int CALL Configure(int prop, void* data, size_t size) {
         default:
             break;
     }
+    logfmt("Configure: Unknown property or bad size");
     return 1;
 }
-int CALL Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter, void* state) {
+int CALL spi_screen::CanConnect() {
+    return 1;
+}
+int CALL spi_screen::Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter, void* state) {
     switch (pin) {
         case SPI_SCREEN_PIN_CS:
             if (getter == nullptr) {
@@ -762,6 +696,7 @@ int CALL Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter
             }
             rst.read = getter;
             rst.read_state = state;
+            rst.on_change_callback_state = this;
             rst.on_change_callback = on_rst_changed;
             break;
         case SPI_SCREEN_PIN_BKL:
@@ -777,10 +712,17 @@ int CALL Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter
     can_configure = false;
     return 0;
 }
-// int CALL Update() {
-//     return 0;
-// }
-int CALL PinChange(uint8_t pin, uint32_t value) {
+int CALL spi_screen::CanUpdate() {
+    return 0;
+}
+int CALL Update() {
+    return 0;
+}
+int CALL spi_screen::CanPinChange() {
+    return 1;
+}
+
+int CALL spi_screen::PinChange(uint8_t pin, uint32_t value) {
     switch (pin) {
         case SPI_SCREEN_PIN_CS:
             cs.on_changed(value);
@@ -799,11 +741,19 @@ int CALL PinChange(uint8_t pin, uint32_t value) {
     }
     return 0;
 }
-int CALL AttachLog(log_callback logger) {
-    ::logger = logger;
+int CALL spi_screen::CanAttachLog() {
+    return 1;
+}
+
+int CALL spi_screen::AttachLog(log_callback logger) {
+    this->logger = logger;
     return logger == NULL;
 }
-int CALL TransferBitsSPI(uint8_t* data, size_t size_bits) {
+int CALL spi_screen::CanTransferBitsSPI() {
+    return 1;
+}
+
+int CALL spi_screen::TransferBitsSPI(uint8_t* data, size_t size_bits) {
     if (cs.value()) {
         return 0;
     }
@@ -814,7 +764,11 @@ int CALL TransferBitsSPI(uint8_t* data, size_t size_bits) {
     }
     return 0;
 }
-int CALL TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size) {
+int CALL spi_screen::CanTransferBytesI2C() {
+    return 1;
+}
+
+int CALL spi_screen::TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size) {
     
     //logfmt("addr: %X, in_size: %d, out_size: %d%s",*in&0x7f,in_size,*in_out_out_size,*in&0x80?" (read)":" (write)");
 
@@ -999,6 +953,14 @@ int CALL TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_
     }
     return 0;    
 }
+int spi_screen::Update() {
+    return 0;
+}
+int spi_screen::Destroy() {
+    delete this;
+    return 0;
+}
+
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     switch (fdwReason) {
         case DLL_PROCESS_ATTACH:
@@ -1006,9 +968,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
             break;
 
         case DLL_PROCESS_DETACH:
-            if (quit_event != NULL) {
-                SetEvent(quit_event);
-            }
+           
             break;
 
         case DLL_THREAD_ATTACH:
@@ -1019,4 +979,17 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
     }
 
     return TRUE;
+}
+
+int CALL CreateHardware(hardware_interface** out_hardware) {
+    if(out_hardware==NULL) {
+        return 1;
+    }
+    spi_screen* scr = new spi_screen();
+    scr->initialize();
+    if(scr==nullptr) {
+        return 3;
+    }
+    *out_hardware = static_cast<hardware_interface*>(scr);
+    return 0;
 }
