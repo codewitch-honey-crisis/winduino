@@ -754,7 +754,7 @@ void winduino() {
         int16_t x;
         int16_t y;
     } screen_offsets = {40,53};
-    hardware_attach_log(hw_screen);
+    hardware_attach_log(hw_screen,"[scr]",255);
     if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
         Serial.println("Unable to configure hardware");
     }

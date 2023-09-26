@@ -57,17 +57,26 @@ void spi_screen::initialize() {
     in_pixel_transfer = false;
     render_changed = 1;
 }
-void spi_screen::logfmt(const char* format, ...) {
+void spi_screen::logfmt(uint8_t level,const char* format, ...) {
     if (logger == nullptr) {
+        return;
+    }
+    if(level>log_level) {
         return;
     }
     char loc_buf[1024];
     char* temp = loc_buf;
+    if(log_prefix!=nullptr) {
+        strcpy(temp,log_prefix);
+        strcpy(temp+strlen(temp),": ");
+    } else {
+        *temp=0;
+    }
     va_list arg;
     va_list copy;
     va_start(arg, format);
     va_copy(copy, arg);
-    int len = vsnprintf(temp, sizeof(loc_buf), format, copy);
+    int len = vsnprintf(temp+strlen(temp), sizeof(loc_buf), format, copy);
     va_end(copy);
     if (len < 0) {
         va_end(arg);
@@ -523,7 +532,7 @@ uint8_t spi_screen::process_byte_spi(uint8_t val) {
                     in_pixel_transfer = false;
                 }
             } else {
-                logfmt("Error writing pixels (unable to wait screen ready): %x", GetLastError());
+                logfmt(1,"Error writing pixels (unable to wait screen ready): %x", GetLastError());
             }
         } else if (cmd == read) {
             if (in_pixel_transfer) {
@@ -605,7 +614,7 @@ void spi_screen::on_rst_changed(void* state) {
                 NULL  // object name
             );
             if (st->screen_ready == NULL) {
-                st->logfmt("unable to create screen_ready handle");
+                st->logfmt(1,"Unable to create screen_ready handle");
             }
         }
         if (st->quit_event == NULL) {
@@ -618,13 +627,14 @@ int CALL spi_screen::CanConfigure() {
 }
 int CALL spi_screen::Configure(int prop, void* data, size_t size) {
     if (!can_configure) {
-        logfmt("Invalid state for configuration");
+        logfmt(1,"Invalid state for configuration");
         return 2;
     }
     switch (prop) {
         case SPI_SCREEN_PROP_RESOLUTION:
             if (size == sizeof(screen_size)) {
                 memcpy(&screen_size, data, size);
+                logfmt(3,"Resolution set to %dx%d",screen_size.width,screen_size.height);
                 return 0;
             } 
             break;
@@ -632,43 +642,49 @@ int CALL spi_screen::Configure(int prop, void* data, size_t size) {
             if (size = sizeof(int)) {
                 int v = *((int*)data);
                 bkl_low = (v != 0);
+                logfmt(3,"Backlight set on = %s",bkl_low?"low":"high");
                 return 0;
             }
             break;
         case SPI_SCREEN_PROP_COLSET:
             if (size == sizeof(uint8_t)) {
                 colset = *((uint8_t*)data);
+                logfmt(3,"COLSET set to = %02X",colset);
                 return 0;
             }
             break;
         case SPI_SCREEN_PROP_ROWSET:
             if (size == sizeof(uint8_t)) {
                 rowset = *((uint8_t*)data);
+                logfmt(3,"ROWSET set to = %02X",rowset);
                 return 0;
             }
             break;
         case SPI_SCREEN_PROP_WRITE:
             if (size == sizeof(uint8_t)) {
                 write = *((uint8_t*)data);
+                logfmt(3,"RAMWR set to = %02X",write);
                 return 0;
             }
             break;
         case SPI_SCREEN_PROP_READ:
             if (size == sizeof(uint8_t)) {
                 read = *((uint8_t*)data);
+                logfmt(3,"RAMRD set to = %02X",read);
                 return 0;
             }
             break;
         case SPI_SCREEN_PROP_OFFSETS:
             if (size == sizeof(screen_offsets)) {
                 memcpy(&screen_offsets, data, size);
+                logfmt(3,"Offsets set to {%d,%d}",screen_offsets.x,screen_offsets.y);
                 return 0;
             }
             break;
         default:
             break;
     }
-    logfmt("Configure: Unknown property or bad size");
+    logfmt(1,"Configure: Unknown property or bad size");
     return 1;
 }
 int CALL spi_screen::CanConnect() {
@@ -745,8 +761,10 @@ int CALL spi_screen::CanAttachLog() {
     return 1;
 }
 
-int CALL spi_screen::AttachLog(log_callback logger) {
+int CALL spi_screen::AttachLog(log_callback logger, const char* prefix, uint8_t level) {
     this->logger = logger;
+    this->log_prefix = prefix;
+    this->log_level = level;
     return logger == NULL;
 }
 int CALL spi_screen::CanTransferBitsSPI() {

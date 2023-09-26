@@ -88,7 +88,7 @@ public:
     virtual int CALL CanTransferBytesI2C() =0;
     virtual int CALL TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size) =0;
     virtual int CALL CanAttachLog() =0;
-    virtual int CALL AttachLog(log_callback logger) =0;
+    virtual int CALL AttachLog(log_callback logger, const char* prefix, uint8_t level) =0;
     virtual int CALL Destroy() = 0;
 };
 class spi_screen : public hardware_interface {
@@ -131,6 +131,8 @@ class spi_screen : public hardware_interface {
     HANDLE screen_ready;// = NULL;
     HANDLE touch_mutex;// = NULL;
     log_callback logger;// = NULL;
+    const char* log_prefix;
+    uint8_t log_level;
     bool in_pixel_transfer;// = false;
     volatile DWORD render_changed;// = 1;
     // mouse mess
@@ -147,7 +149,7 @@ class spi_screen : public hardware_interface {
     ID2D1Bitmap* render_bitmap;// = nullptr;
     HWND hwnd_screen;// = nullptr;
     bool created_wndcls;// = false;
-    void logfmt(const char* format, ...);
+    void logfmt(uint8_t level,const char* format, ...);
     void update_title(HWND hwnd);
     uint8_t process_byte_spi(uint8_t val);
     static DWORD window_thread_proc(void* state);
@@ -169,7 +171,7 @@ public:
     virtual int CALL CanTransferBytesI2C();
     virtual int CALL TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size);
     virtual int CALL CanAttachLog();
-    virtual int CALL AttachLog(log_callback logger);
+    virtual int CALL AttachLog(log_callback logger,const char* prefix, uint8_t level);
     virtual int CALL Destroy();
 };
 
