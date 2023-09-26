@@ -745,7 +745,7 @@ void loop() {
 #endif
     anim_screen.update();
 }
-// the following code only runs when executed in Winduino
+// the following code runs before setup() only when executed in Winduino
 #ifdef WINDUINO
 void winduino() {
     // so we can log
