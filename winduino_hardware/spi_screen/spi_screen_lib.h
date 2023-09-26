@@ -76,19 +76,31 @@ typedef enum touch_states {
 class hardware_interface {
 public:
     virtual int CALL CanConfigure() =0;
-    virtual int CALL Configure(int prop, void* data, size_t size) =0;
+    virtual int CALL Configure(int prop, 
+                            void* data, 
+                            size_t size) =0;
     virtual int CALL CanConnect() =0;
-    virtual int CALL Connect(uint8_t pin, gpio_get_callback getter, gpio_set_callback setter, void* state) =0;
+    virtual int CALL Connect(uint8_t pin, 
+                            gpio_get_callback getter, 
+                            gpio_set_callback setter, 
+                            void* state) =0;
     virtual int CALL CanUpdate() =0;
     virtual int CALL Update() =0;
     virtual int CALL CanPinChange() =0;
-    virtual int CALL PinChange(uint8_t pin, uint32_t value) =0;
+    virtual int CALL PinChange(uint8_t pin, 
+                            uint32_t value) =0;
     virtual int CALL CanTransferBitsSPI() =0;
-    virtual int CALL TransferBitsSPI(uint8_t* data, size_t size_bits) =0;
+    virtual int CALL TransferBitsSPI(uint8_t* data, 
+                                    size_t size_bits) =0;
     virtual int CALL CanTransferBytesI2C() =0;
-    virtual int CALL TransferBytesI2C(const uint8_t* in, size_t in_size, uint8_t* out, size_t* in_out_out_size) =0;
+    virtual int CALL TransferBytesI2C(const uint8_t* in, 
+                                    size_t in_size, 
+                                    uint8_t* out, 
+                                    size_t* in_out_out_size) =0;
     virtual int CALL CanAttachLog() =0;
-    virtual int CALL AttachLog(log_callback logger, const char* prefix, uint8_t level) =0;
+    virtual int CALL AttachLog(log_callback logger, 
+                            const char* prefix, 
+                            uint8_t level) =0;
     virtual int CALL Destroy() = 0;
 };
 class spi_screen : public hardware_interface {
