@@ -5,28 +5,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(FIND_LIBRARY_USE_LIB64_PATHS True)
 set( DXLIBS d2d1 )
-
-add_library(winduino 
-                winduino/Arduino.cpp
-                winduino/WString.cpp
-                winduino/stdlib_noniso.c
-                winduino/Print.cpp
-                winduino/Stream.cpp
-                winduino/StreamString.cpp
-                winduino/WMath.cpp
-                winduino/HardwareSerial.cpp
-                winduino/StdioFSImpl.cpp
-                winduino/FS.cpp
-                winduino/SD.cpp
-                winduino/SPI.cpp
-                winduino/Wire.cpp)
-target_link_libraries(winduino ${DXLIBS} )
-target_include_directories(winduino PUBLIC
-    "${PROJECT_SOURCE_DIR}"    
-    "${PROJECT_BINARY_DIR}"
-)
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
+
+add_subdirectory(lib/htcw_winduino)
 
 add_library(winduino_spi_screen SHARED
     winduino_hardware/spi_screen/spi_screen.cpp)

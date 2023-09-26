@@ -577,55 +577,7 @@ static void screen_init() {
 }
 void setup() {
     Serial.begin(115200);
-#ifdef WINDUINO
-#define TFT_CASET 0x2A
-#define TFT_PASET 0x2B
-#define TFT_RAMWR 0x2C
-#define TFT_RAMRD 0x2E
 
-    void* hw_screen = hardware_load(LIB_SPI_SCREEN);
-    if(hw_screen==nullptr) {
-        Serial.println("Unable to load external SPI screen");
-    }
-    struct {
-        uint16_t width;
-        uint16_t height;
-    } screen_size = {240,135};
-    struct {
-        int16_t x;
-        int16_t y;
-    } screen_offsets = {40,53};
-    hardware_attach_log(hw_screen);
-    if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
-        Serial.println("Unable to configure hardware");
-    }
-    if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_OFFSETS,&screen_offsets,sizeof(screen_offsets))) {
-        Serial.println("Unable to configure hardware");
-    }
-    hardware_set_pin(hw_screen,15, SPI_SCREEN_PIN_BKL);    
-    hardware_set_pin(hw_screen,5, SPI_SCREEN_PIN_CS);
-    hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
-    hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
-    hardware_attach_spi(hw_screen,0);
-    hardware_attach_i2c(hw_screen,0);
-lcd2.initialize();
-if(touch2.initialize()==false) {
-    Serial.println("Could not find FT6236");
-}
-open_text_info oti;
-oti.font = &text_font;
-oti.scale = oti.font->scale(50);
-oti.text = "Hello world!";
-// reading SPI displays is slow so we don't. In fact, bitmaps are really the best way to draw
-auto bmp = create_bitmap_from(lcd2,{screen_size.width,screen_size.height});
-if(bmp.begin()) {
-    bmp.fill(bmp.bounds(),color2_t::orange);
-    draw::text(bmp,bmp.bounds(),oti,color2_t::wheat);
-    draw::bitmap(lcd2,lcd2.bounds(),bmp,bmp.bounds());
-    free(bmp.begin());
-}
-    //lcd2.fill({0,0,49,49},color2_t::red);
-#endif
     pinMode(17,OUTPUT);
     digitalWrite(17,HIGH);
     attachInterrupt(18,[]() {
@@ -785,3 +737,52 @@ void loop() {
     }
     anim_screen.update();
 }
+// the following code only runs when executed in Winduino
+#ifdef WINDUINO
+void winduino() {
+    Serial.begin(115200);
+    void* hw_screen = hardware_load(LIB_SPI_SCREEN);
+    if(hw_screen==nullptr) {
+        Serial.println("Unable to load external SPI screen");
+    }
+    struct {
+        uint16_t width;
+        uint16_t height;
+    } screen_size = {240,135};
+    struct {
+        int16_t x;
+        int16_t y;
+    } screen_offsets = {40,53};
+    hardware_attach_log(hw_screen);
+    if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
+        Serial.println("Unable to configure hardware");
+    }
+    if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_OFFSETS,&screen_offsets,sizeof(screen_offsets))) {
+        Serial.println("Unable to configure hardware");
+    }
+    hardware_set_pin(hw_screen,15, SPI_SCREEN_PIN_BKL);    
+    hardware_set_pin(hw_screen,5, SPI_SCREEN_PIN_CS);
+    hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
+    hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
+    hardware_attach_spi(hw_screen,0);
+    hardware_attach_i2c(hw_screen,0);
+    lcd2.initialize();
+    if(touch2.initialize()==false) {
+        Serial.println("Could not find FT6236");
+    }
+    open_text_info oti;
+    oti.font = &text_font;
+    oti.scale = oti.font->scale(50);
+    oti.text = "Hello world!";
+    // reading SPI displays is slow so we don't. In fact, bitmaps are really the best way to draw
+    auto bmp = create_bitmap_from(lcd2,{screen_size.width,screen_size.height});
+    if(bmp.begin()) {
+        bmp.fill(bmp.bounds(),color2_t::orange);
+        draw::text(bmp,bmp.bounds(),oti,color2_t::wheat);
+        draw::bitmap(lcd2,lcd2.bounds(),bmp,bmp.bounds());
+        free(bmp.begin());
+    }
+        //lcd2.fill({0,0,49,49},color2_t::red);
+
+}
+#endif
