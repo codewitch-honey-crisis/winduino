@@ -13,7 +13,7 @@ using namespace gfx;
 using namespace uix;
 using namespace arduino;
 
-using bus_t = tft_spi<0,5>;
+using bus_t = tft_spi<1,5>;
 using lcd_t = st7789<135,240,2,4,-1,bus_t,1>;
 using touch_t = ft6236<240,135>;
 // creates a BGRx pixel by making each channel 
@@ -805,7 +805,7 @@ void winduino() {
     hardware_set_pin(hw_screen,2,SPI_SCREEN_PIN_DC);
     hardware_set_pin(hw_screen,4,SPI_SCREEN_PIN_RST);
     // attach the SPI bus (for the screen)
-    hardware_attach_spi(hw_screen,0);
+    hardware_attach_spi(hw_screen,1);
     // attach the I2C bus (for touch)
     hardware_attach_i2c(hw_screen,0);
    
