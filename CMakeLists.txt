@@ -19,10 +19,14 @@ target_include_directories(winduino_spi_screen PUBLIC
     "${PROJECT_BINARY_DIR}"
     )
 
+add_library(htcw_bits INTERFACE)
+target_include_directories(htcw_bits INTERFACE
+    "${PROJECT_SOURCE_DIR}/lib/htcw_bits/include"
+)
 
 add_library(htcw_io lib/htcw_io/src/io_stream.cpp)
+target_link_libraries(htcw_io htcw_bits)
 target_include_directories(htcw_io PUBLIC
-"${PROJECT_SOURCE_DIR}/lib/htcw_bits/include"
 "${PROJECT_SOURCE_DIR}/lib/htcw_io/include"
 "${PROJECT_BINARY_DIR}")
 
