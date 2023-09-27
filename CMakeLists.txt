@@ -10,7 +10,7 @@ set(CMAKE_SHARED_LIBRARY_PREFIX "")
 
 add_subdirectory(lib/htcw_winduino)
 
-#gfx library dependencies
+#uix/gfx library dependencies
 add_subdirectory(lib/htcw_bits)
 add_subdirectory(lib/htcw_data)
 add_subdirectory(lib/htcw_io)
