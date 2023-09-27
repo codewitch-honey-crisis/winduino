@@ -117,14 +117,14 @@ touch_t touch2;
 // UIX allows you to use two buffers for maximum DMA efficiency
 // you don't have to, but performance is significantly better
 // declare 64KB across two buffers for transfer
-constexpr static const int lcd_screen_size = bitmap<typename screen_t::pixel_type>::sizeof_buffer(size16(winduino_screen_size.width, winduino_screen_size.height));
+constexpr static const int lcd_screen_size = bitmap<typename screen_t::pixel_type>::sizeof_buffer({320,240});
 constexpr static const int lcd_buffer_size = lcd_screen_size > 64 * 1024 ? 64 * 1024 : lcd_screen_size;
 static uint8_t lcd_buffer1[lcd_buffer_size];
 
 
 
 // the main screen
-screen_t anim_screen({winduino_screen_size.width,winduino_screen_size.height}, sizeof(lcd_buffer1), lcd_buffer1, nullptr);
+screen_t anim_screen({320,240}, sizeof(lcd_buffer1), lcd_buffer1, nullptr);
 
 void uix_on_touch(point16* out_locations,
                   size_t* in_out_locations_size,
@@ -137,14 +137,14 @@ void uix_on_touch(point16* out_locations,
         if(x<0) {
             x=0;
         }
-        if(x>=winduino_screen_size.width) {
-            x=winduino_screen_size.width-1;
+        if(x>=320) {
+            x=319;
         }
         if(y<0) {
             y=0;
         }
-        if(y>=winduino_screen_size.height) {
-            y=winduino_screen_size.height-1;
+        if(y>=240) {
+            y=239;
         }
         *in_out_locations_size =1;
         *out_locations = point16((unsigned)x,(unsigned)y);
@@ -170,10 +170,10 @@ static label_t summaries[] = {
 template <typename ControlSurfaceType>
 class fire_box : public control<ControlSurfaceType> {
     int draw_state = 0;
-	constexpr static const int V_WIDTH =winduino_screen_size.width / 4;
-	constexpr static const int V_HEIGHT =winduino_screen_size.height / 4;
-	constexpr static const int BUF_WIDTH =winduino_screen_size.width / 4;
-	constexpr static const int BUF_HEIGHT =winduino_screen_size.height / 4+6;
+	constexpr static const int V_WIDTH =320 / 4;
+	constexpr static const int V_HEIGHT =240 / 4;
+	constexpr static const int BUF_WIDTH =320 / 4;
+	constexpr static const int BUF_HEIGHT =240 / 4+6;
 
     uint8_t p1[BUF_HEIGHT][BUF_WIDTH];  // VGA buffer, quarter resolution w/extra lines
     unsigned int i, j, k, l, delta;     // looping variables, counters, and data
@@ -590,6 +590,32 @@ void setup() {
     
     // init the UI screen
     screen_init();
+#ifdef WINDUINO
+     // finally we can initialize 
+    // the screen and touch
+    if(!lcd2.initialize()) {
+        Serial.println("Could not find the ST7789");
+    }
+
+    if(touch2.initialize()==false) {
+        Serial.println("Could not find FT6236");
+    }
+    
+    // draw our screen
+    open_text_info oti;
+    oti.font = &text_font;
+    oti.scale = oti.font->scale(50);
+    oti.text = "Hello world!";
+    
+    // reading SPI displays is slow so we don't. In fact, bitmaps are really the best way to draw
+    auto bmp = create_bitmap_from(lcd2,lcd2.dimensions());
+    if(bmp.begin()) {
+        bmp.fill(bmp.bounds(),color2_t::orange);
+        draw::text(bmp,bmp.bounds(),oti,color2_t::wheat);
+        draw::bitmap(lcd2,lcd2.bounds(),bmp,bmp.bounds());
+        free(bmp.begin());
+    }
+#endif
 }
 void loop() {
     constexpr static const int run_seconds = 5;
@@ -748,9 +774,8 @@ void loop() {
 // the following code runs before setup() only when executed in Winduino
 #ifdef WINDUINO
 void winduino() {
-    // so we can log
-    Serial.begin(115200);
-
+    //hardware_set_screen_size(480,320);
+    
     // load the SPI screen
     void* hw_screen = hardware_load(LIB_SPI_SCREEN);
     if(hw_screen==nullptr) {
@@ -783,30 +808,6 @@ void winduino() {
     hardware_attach_spi(hw_screen,0);
     // attach the I2C bus (for touch)
     hardware_attach_i2c(hw_screen,0);
-    
-    // finally we can initialize 
-    // the screen and touch
-    if(!lcd2.initialize()) {
-        Serial.println("Could not find the ST7789");
-    }
-
-    if(touch2.initialize()==false) {
-        Serial.println("Could not find FT6236");
-    }
-    
-    // draw our screen
-    open_text_info oti;
-    oti.font = &text_font;
-    oti.scale = oti.font->scale(50);
-    oti.text = "Hello world!";
-    
-    // reading SPI displays is slow so we don't. In fact, bitmaps are really the best way to draw
-    auto bmp = create_bitmap_from(lcd2,{screen_size.width,screen_size.height});
-    if(bmp.begin()) {
-        bmp.fill(bmp.bounds(),color2_t::orange);
-        draw::text(bmp,bmp.bounds(),oti,color2_t::wheat);
-        draw::bitmap(lcd2,lcd2.bounds(),bmp,bmp.bounds());
-        free(bmp.begin());
-    }
+   
 }
 #endif
