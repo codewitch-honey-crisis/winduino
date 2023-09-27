@@ -614,7 +614,7 @@ void loop() {
     if (ms > fps_ts + 1000) {
         fps_ts = ms;
         snprintf(szfps, sizeof(szfps), "fps: %d", frames);
-        //Serial.println(szfps);
+        Serial.println(szfps);
         fps.text(szfps);
         if (alpha.visible()) {
             fps_alpha[fps_index++] = frames;
@@ -693,28 +693,28 @@ void loop() {
                 plaid_fps_sum += fps;
             }
             strcpy(szsummaries[0], "alpha max/avg/frames");
-            //Serial.println(szsummaries[0]);
+            Serial.println(szsummaries[0]);
             summaries[0].text(szsummaries[0]);
             sprintf(szsummaries[1], "%d/%d/%d", alpha_fps_max,
                     (int)roundf((float)alpha_fps_sum / (float)run_seconds),
                     total_frames_alpha);
-            //Serial.println(szsummaries[1]);
+            Serial.println(szsummaries[1]);
             summaries[1].text(szsummaries[1]);
             strcpy(szsummaries[2], "fire max/avg/frames");
-            //Serial.println(szsummaries[2]);
+            Serial.println(szsummaries[2]);
             summaries[2].text(szsummaries[2]);
             sprintf(szsummaries[3], "%d/%d/%d", fire_fps_max,
                     (int)roundf((float)fire_fps_sum / (float)run_seconds),
                     total_frames_fire);
             summaries[3].text(szsummaries[3]);
-            //Serial.println(szsummaries[3]);
+            Serial.println(szsummaries[3]);
             strcpy(szsummaries[4], "plaid max/avg/frames");
             summaries[4].text(szsummaries[4]);
-            //Serial.println(szsummaries[4]);
+            Serial.println(szsummaries[4]);
             sprintf(szsummaries[5], "%d/%d/%d", plaid_fps_max,
                     (int)roundf((float)plaid_fps_sum / (float)run_seconds),
                     total_frames_plaid);
-            //Serial.println(szsummaries[5]);
+            Serial.println(szsummaries[5]);
             summaries[5].text(szsummaries[5]);
             fps_index = 0;
         }
