@@ -779,7 +779,7 @@ void winduino() {
     // load the SPI screen
     void* hw_screen = hardware_load(LIB_SPI_SCREEN);
     if(hw_screen==nullptr) {
-        Serial.println("Unable to load external SPI screen");
+        log_print("Unable to load external SPI screen\r\n");
     }
     // attach the log (log all messages, including debug)
     hardware_attach_log(hw_screen,"[scr]",255);
@@ -789,7 +789,7 @@ void winduino() {
         uint16_t height;
     } screen_size = {240,135};
     if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_RESOLUTION,&screen_size,sizeof(screen_size))) {
-        Serial.println("Unable to configure hardware");
+        log_print("Unable to configure hardware\r\n");
     }
     // set the panel offsets
     struct {
@@ -797,7 +797,7 @@ void winduino() {
         int16_t y;
     } screen_offsets = {40,53};
     if(!hardware_configure(hw_screen,SPI_SCREEN_PROP_OFFSETS,&screen_offsets,sizeof(screen_offsets))) {
-        Serial.println("Unable to configure hardware");
+        log_print("Unable to configure hardware\r\n");
     }
     // set the screen GPIOs (aside from SPI which are fixed and virtual)
     hardware_set_pin(hw_screen,15, SPI_SCREEN_PIN_BKL);    
