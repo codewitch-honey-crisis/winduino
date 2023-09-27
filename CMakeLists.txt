@@ -52,17 +52,33 @@ target_include_directories(htcw_gfx PUBLIC
 "${PROJECT_SOURCE_DIR}/lib/htcw_gfx/include"
 "${PROJECT_BINARY_DIR}")
 
+add_library(htcw_uix INTERFACE)
+target_include_directories(htcw_uix INTERFACE
+    "${PROJECT_SOURCE_DIR}/lib/htcw_uix/include"
+)
+
+add_library(htcw_tft_io INTERFACE)
+target_include_directories(htcw_tft_io INTERFACE
+    "${PROJECT_SOURCE_DIR}/lib/htcw_tft_io/include"
+)
+
+add_library(htcw_st7789 INTERFACE)
+target_include_directories(htcw_st7789 INTERFACE
+    "${PROJECT_SOURCE_DIR}/lib/htcw_st7789/include"
+)
+
+add_library(htcw_ft6236 INTERFACE)
+target_include_directories(htcw_ft6236 INTERFACE
+    "${PROJECT_SOURCE_DIR}/lib/htcw_ft6236/include"
+)
+
 add_executable(example 
     src/main.cpp
 )
-target_link_libraries(example winduino htcw_gfx)
+target_link_libraries(example htcw_winduino htcw_gfx htcw_uix htcw_tft_io htcw_st7789 htcw_ft6236)
 target_include_directories(example PUBLIC
     "${PROJECT_SOURCE_DIR}"
-    "${PROJECT_SOURCE_DIR}/winduino"
-    "${PROJECT_SOURCE_DIR}/lib/htcw_uix/include"
-    "${PROJECT_SOURCE_DIR}/lib/htcw_tft_io/include"
-    "${PROJECT_SOURCE_DIR}/lib/htcw_st7789/include"
-    "${PROJECT_SOURCE_DIR}/lib/htcw_ft6236/include"
     "${PROJECT_BINARY_DIR}"
     "${PROJECT_SOURCE_DIR}/include"
+    "${PROJECT_SOURCE_DIR}/src"
   )
