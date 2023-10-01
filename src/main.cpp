@@ -1,5 +1,4 @@
 // the code in this file is from my UIX benchmark demo, which is MIT licensed - honey the codewitch
-#define SCREEN_SIZE {320,240}
 #include <Arduino.h>
 #include <SD.h>
 #include <SPI.h>
