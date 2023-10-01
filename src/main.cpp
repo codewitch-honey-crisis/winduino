@@ -781,6 +781,7 @@ void loop() {
 // the following code runs before setup() only when executed in Winduino
 #ifdef WINDUINO
 void winduino() {
+    log_print("hello from winduino()\r\n");
     //hardware_set_screen_size(480,320);
     
     // load the SPI screen
