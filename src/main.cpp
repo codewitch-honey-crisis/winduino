@@ -577,6 +577,8 @@ static void screen_init() {
 }
 void setup() {
     Serial.begin(115200);
+    Serial1.begin(115200);
+    Serial1.println("Hello world!");
     // make some virtual GPIOs
     pinMode(17,OUTPUT);
     digitalWrite(17,HIGH);
@@ -651,6 +653,7 @@ void loop() {
         }
         frames = 0;
         ++seconds;
+        //Serial1.println("FOO!");
         // toggle every second
         digitalWrite(17,toggle?HIGH:LOW);
         toggle=!toggle;
@@ -770,6 +773,11 @@ void loop() {
     }
 #endif
     anim_screen.update();
+    char buf[1024];
+    while(Serial1.available()) {
+        Serial1.read(buf,sizeof(buf));
+        Serial.write(buf);
+    }
 }
 // the following code runs before setup() only when executed in Winduino
 #ifdef WINDUINO
@@ -808,6 +816,8 @@ void winduino() {
     hardware_attach_spi(hw_screen,1);
     // attach the I2C bus (for touch)
     hardware_attach_i2c(hw_screen,0);
+    // attach Serial1 to COM25
+    //hardware_attach_serial(1,25);
    
 }
 #endif
