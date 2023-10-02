@@ -609,12 +609,13 @@ void setup() {
     oti.text = "Hello world!";
     
     // reading SPI displays is slow so we don't. In fact, bitmaps are really the best way to draw
+    // create a bitmap with the same underlying format as the display
     auto bmp = create_bitmap_from(lcd2,lcd2.dimensions());
-    if(bmp.begin()) {
+    if(bmp.begin()) { // make sure not out of memory
         bmp.fill(bmp.bounds(),color2_t::orange);
         draw::text(bmp,bmp.bounds(),oti,color2_t::wheat);
         draw::bitmap(lcd2,lcd2.bounds(),bmp,bmp.bounds());
-        free(bmp.begin());
+        free(bmp.begin()); // free it when we're done
     }
 #endif
 }
