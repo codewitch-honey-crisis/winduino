@@ -29,7 +29,7 @@ add_subdirectory(winduino_hardware/spi_screen)
 add_executable(example 
     src/main.cpp
 )
-target_link_libraries(example htcw_winduino htcw_gfx htcw_uix htcw_tft_io htcw_st7789 htcw_ft6236)
+target_link_libraries(example htcw_winduino htcw_bits htcw_io htcw_data htcw_ml htcw_gfx htcw_uix htcw_tft_io htcw_st7789 htcw_ft6236)
 target_include_directories(example PUBLIC
     "${PROJECT_SOURCE_DIR}"
     "${PROJECT_BINARY_DIR}"
