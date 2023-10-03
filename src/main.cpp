@@ -12,8 +12,11 @@ using namespace gfx;
 using namespace uix;
 using namespace arduino;
 
+// using the SPI bus 1 (default is 0), CS of 5
 using bus_t = tft_spi<1,5>;
+// use the ST7789 driver with the above bus
 using lcd_t = st7789<135,240,2,4,-1,bus_t,1>;
+// declare the touch panel
 using touch_t = ft6236<240,135>;
 // creates a BGRx pixel by making each channel 
 // one quarter of the whole. Any remainder bits
@@ -114,8 +117,8 @@ using color32_t = color<rgba_pixel<32>>;
 lcd_t lcd2;
 touch_t touch2;
 // UIX allows you to use two buffers for maximum DMA efficiency
-// you don't have to, but performance is significantly better
-// declare 64KB across two buffers for transfer
+// but it's not used in Winduino, which really doesn't need it.
+// So we declare one 64KB buffer for the transfer
 constexpr static const int lcd_screen_size = bitmap<typename screen_t::pixel_type>::sizeof_buffer({320,240});
 constexpr static const int lcd_buffer_size = lcd_screen_size > 64 * 1024 ? 64 * 1024 : lcd_screen_size;
 static uint8_t lcd_buffer1[lcd_buffer_size];
@@ -653,7 +656,6 @@ void loop() {
         }
         frames = 0;
         ++seconds;
-        //Serial1.println("FOO!");
         // toggle every second
         digitalWrite(17,toggle?HIGH:LOW);
         toggle=!toggle;
