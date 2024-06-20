@@ -146,7 +146,7 @@ class spi_screen : public hardware_interface {
     const char* log_prefix;
     uint8_t log_level;
     bool in_pixel_transfer;// = false;
-    volatile DWORD render_changed;// = 1;
+    volatile long render_changed;// = 1;
     // mouse mess
     struct {
         int x;
@@ -164,8 +164,8 @@ class spi_screen : public hardware_interface {
     void logfmt(uint8_t level,const char* format, ...);
     void update_title(HWND hwnd);
     uint8_t process_byte_spi(uint8_t val);
-    static DWORD window_thread_proc(void* state);
-    static DWORD render_thread_proc(void* state);
+    static unsigned long CALLBACK window_thread_proc(void* state);
+    static unsigned long CALLBACK render_thread_proc(void* state);
     static LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     static void on_rst_changed(void* state);
 public:

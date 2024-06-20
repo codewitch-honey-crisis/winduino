@@ -565,7 +565,7 @@ uint8_t spi_screen::process_byte_spi(uint8_t val) {
     }
     return val;
 }
-DWORD spi_screen::render_thread_proc(void* state) {
+unsigned long __stdcall spi_screen::render_thread_proc(void* state) {
     spi_screen* st = (spi_screen*)state;
     bool quit = false;
     while (!quit) {

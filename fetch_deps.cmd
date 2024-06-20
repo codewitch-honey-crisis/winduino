@@ -1,4 +1,3 @@
-
 @rmdir lib /S /Q
 @mkdir lib
 @cd lib
